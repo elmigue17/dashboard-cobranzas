@@ -34,7 +34,7 @@ Necesitas:
 
 Abre Claude Code en una carpeta vacía y escríbele:
 
-> Instala este proyecto siguiendo el archivo INSTALAR.md paso a paso: [LINK DE ESTE REPO]
+> Instala este proyecto siguiendo el archivo INSTALAR.md paso a paso: https://github.com/elmigue17/dashboard-cobranzas
 
 Dile que siga el archivo **paso a paso**: así te pregunta cómo es tu negocio en lugar de adivinarlo.
 Todo lo que contestes queda anotado en `NEGOCIO.md`, y cuando más adelante le pidas un cambio (otro
