@@ -83,7 +83,7 @@ const ContentManager = ({ onViewLeads }) => {
       const payload = {
         id: originKey,
         nombre: normalizedName,
-        fecha: new Date(`${fecha}T00:00:00`).toISOString(),
+        fecha,
         link: link || null,
       };
 

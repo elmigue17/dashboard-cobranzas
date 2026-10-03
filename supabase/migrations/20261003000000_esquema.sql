@@ -9,6 +9,10 @@
 --   alumnos          clientes que compraron un programa
 --   ventas           cada compra (o renovación) de un alumno
 --   cuotas           el plan de pagos de cada venta: monto, vencimiento, si se pagó y la comisión
+--
+-- Las fechas de calendario (vencimientos, pagos, inicio y fin) son `date`, sin hora: así un pago
+-- de hoy es de hoy en cualquier zona horaria. Las que marcan un momento (created_at, la última
+-- interacción de un lead, la hora de una llamada) son `timestamptz`.
 
 -- ─── contenidos ─────────────────────────────────────────────────────────────────────────────────
 -- El id es el código de la pieza que llega desde tu herramienta de mensajes (por ejemplo C_21_04,
@@ -18,7 +22,7 @@ create table public.contenidos (
   id text primary key,
   created_at timestamptz not null default now(),
   nombre text,
-  fecha timestamptz,
+  fecha date,
   link text
 );
 
@@ -109,11 +113,11 @@ create table public.alumnos (
   telefono text,
   programa text,
   estado text not null default 'Activo',
-  fecha_inicio timestamptz,
-  fecha_fin timestamptz,
+  fecha_inicio date,
+  fecha_fin date,
   duracion_meses numeric,
-  fecha_baja timestamptz,
-  congelado_desde timestamptz,
+  fecha_baja date,
+  congelado_desde date,
   dias_congelados integer not null default 0,
   setter text,
   closer text,
@@ -131,9 +135,9 @@ create table public.ventas (
   alumno_id uuid not null references public.alumnos(id) on delete cascade,
   programa text not null,
   monto numeric(12, 2) not null,
-  fecha_venta timestamptz not null,
-  fecha_inicio timestamptz,
-  fecha_fin timestamptz,
+  fecha_venta date not null,
+  fecha_inicio date,
+  fecha_fin date,
   n_cuotas integer,
   setter text,
   closer text,
@@ -154,8 +158,8 @@ create table public.cuotas (
   alumno_id uuid not null references public.alumnos(id) on delete cascade,
   n_cuota integer not null,
   monto numeric(12, 2) not null,
-  fecha_vencimiento timestamptz,
-  fecha_pago timestamptz,
+  fecha_vencimiento date,
+  fecha_pago date,
   estado text not null default 'Pendiente',
   setter text,
   closer text,

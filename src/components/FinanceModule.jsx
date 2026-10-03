@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
   UserPlus, CreditCard, BarChart2, CheckCircle, XCircle,
@@ -12,12 +13,7 @@ const PROGRAM_DURATION = { 'Programa Base': 4, 'Programa Pro': 4, 'High Ticket':
 const PROGRAM_OPTIONS  = Object.keys(PROGRAM_DURATION);
 const ESTADOS          = ['Pendiente', 'Pagado', 'Incobrable'];
 
-const addMonths = (date, n) => { const d = new Date(date); d.setMonth(d.getMonth() + n); return d; };
-
-const fmtDate = (ds) => {
-  if (!ds) return '-';
-  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(ds));
-};
+const fmtDate = fmtFecha;
 const fmtMoney = (n) => `$${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Devuelve el modificador de color semántico que usa el design system
@@ -30,11 +26,10 @@ const estadoTone = (estado) => {
 
 // Planilla de cuotas de una venta nueva: la primera es lo que pagó en la llamada (si pagó algo)
 // y el resto se reparte en partes iguales.
-const armarCuotas = ({ alumnoId, ventaId, montoTotal, nCuotas, pagoEnLlamada, fInicio, setter, closer }) => {
+const armarCuotas = ({ alumnoId, ventaId, montoTotal, nCuotas, pagoEnLlamada, fechaInicio, setter, closer }) => {
   const primerMonto = pagoEnLlamada > 0 ? pagoEnLlamada : montoTotal / nCuotas;
   const restoMonto  = nCuotas > 1 ? Math.round(((montoTotal - primerMonto) / (nCuotas - 1)) * 100) / 100 : 0;
   return Array.from({ length: nCuotas }, (_, i) => {
-    const fVenc = addMonths(fInicio, i);
     const es1ra = i === 0;
     return {
       id: crypto.randomUUID(),
@@ -42,8 +37,8 @@ const armarCuotas = ({ alumnoId, ventaId, montoTotal, nCuotas, pagoEnLlamada, fI
       alumno_id: alumnoId,
       n_cuota: i + 1,
       monto: es1ra ? primerMonto : restoMonto,
-      fecha_vencimiento: fVenc.toISOString(),
-      fecha_pago: (es1ra && pagoEnLlamada > 0) ? new Date().toISOString() : null,
+      fecha_vencimiento: sumarMeses(fechaInicio, i),
+      fecha_pago: (es1ra && pagoEnLlamada > 0) ? hoy() : null,
       estado: (es1ra && pagoEnLlamada > 0) ? 'Pagado' : 'Pendiente',
       setter: setter || null,
       closer: closer || null,
@@ -108,8 +103,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const ventasById  = useMemo(() => Object.fromEntries(ventas.map(v => [v.id, v])), [ventas]);
   const nombreAlumno = (c) => alumnosById[c.alumno_id]?.nombre || '-';
 
-  // ── Helpers de fecha (UTC para evitar desfase de zona horaria) ───────────────
-  const CURRENT_YEAR = new Date().getFullYear();
+  // ── Helpers de fecha: las fechas son texto 'AAAA-MM-DD' (ver fechas.js) ──────
+  const HOY          = hoy();
+  const CURRENT_YEAR = Number(HOY.slice(0, 4));
   const MONTH_NAMES  = Array.from({ length: 12 }, (_, i) => {
     const name = new Date(CURRENT_YEAR, i, 1).toLocaleString('es-ES', { month: 'long' });
     return name.charAt(0).toUpperCase() + name.slice(1);
@@ -117,18 +113,18 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
   const makeRangeChecker = (range, cStart, cEnd) => (ds) => {
     if (!ds) return false;
-    const d = new Date(ds);
+    const fecha = String(ds).slice(0, 10);
     if (range === 'CUSTOM') {
       if (!cStart || !cEnd) return true;
-      return d >= new Date(cStart + 'T00:00:00') && d <= new Date(cEnd + 'T23:59:59');
+      return fecha >= cStart && fecha <= cEnd;
     }
-    if (d.getUTCFullYear() !== CURRENT_YEAR) return false;
+    if (Number(fecha.slice(0, 4)) !== CURRENT_YEAR) return false;
     if (range === 'ALL') return true;
-    return d.getUTCMonth() + 1 === parseInt(range);
+    return Number(fecha.slice(5, 7)) === parseInt(range);
   };
 
   // ── Tab 1: Resumen ───────────────────────────────────────────────────────────
-  const [dateRange,   setDateRange]   = useState(String(new Date().getMonth() + 1));
+  const [dateRange,   setDateRange]   = useState(String(Number(hoy().slice(5, 7))));
   const [customStart, setCustomStart] = useState('');
   const [customEnd,   setCustomEnd]   = useState('');
   const isInRange = useMemo(() => makeRangeChecker(dateRange, customStart, customEnd), [dateRange, customStart, customEnd]);
@@ -148,9 +144,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const maxRevProg = revenueByProg[0]?.[1] || 1;
 
   const alertasCobranza = useMemo(() => {
-    const now = new Date(), in7 = new Date(now); in7.setDate(in7.getDate() + 7);
-    return cuotas.filter(c => c.estado === 'Pendiente' && c.fecha_vencimiento && new Date(c.fecha_vencimiento) >= now && new Date(c.fecha_vencimiento) <= in7)
-      .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento));
+    const desde = hoy(), hasta = sumarDias(desde, 7);
+    return cuotas.filter(c => c.estado === 'Pendiente' && c.fecha_vencimiento && c.fecha_vencimiento >= desde && c.fecha_vencimiento <= hasta)
+      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
   }, [cuotas]);
 
   // ── Tab 2: Historial ─────────────────────────────────────────────────────────
@@ -173,7 +169,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     setEditCuota(c);
     setEditEstado(c.estado);
     setEditMonto(String(c.monto || ''));
-    setEditFechaPago(c.fecha_pago ? c.fecha_pago.split('T')[0].split(' ')[0] : '');
+    setEditFechaPago(c.fecha_pago ? String(c.fecha_pago).slice(0, 10) : '');
     setEditComprobante(null);
   };
 
@@ -196,7 +192,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       const updates = {
         estado:          editEstado,
         monto:           parseFloat(editMonto),
-        fecha_pago:      editEstado === 'Pagado' ? (editFechaPago || new Date().toISOString().split('T')[0]) : null,
+        fecha_pago:      editEstado === 'Pagado' ? (editFechaPago || hoy()) : null,
         comprobante_url: comprobanteUrl,
       };
       const { error } = await supabase.from('cuotas').update(updates).eq('id', editCuota.id);
@@ -225,7 +221,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const [rpAlumno,       setRpAlumno]       = useState(null);
   const [rpCuota,        setRpCuota]        = useState('');
   const [rpMonto,        setRpMonto]        = useState('');
-  const [rpFecha,        setRpFecha]        = useState(new Date().toISOString().split('T')[0]);
+  const [rpFecha,        setRpFecha]        = useState(hoy);
   const [rpLoading,      setRpLoading]      = useState(false);
   const [rpComprobante,  setRpComprobante]  = useState(null); // File object
 
@@ -264,15 +260,14 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
       } else if (delta > 0.01 && restantes.length === 0) {
         // ── Caso B: pagó menos, sin cuotas restantes → crear cuota saldo ────────
-        const nextFvenc = new Date(rpFecha + 'T12:00:00');
-        nextFvenc.setMonth(nextFvenc.getMonth() + 1);
+        const nextFvenc = sumarMeses(rpFecha, 1);
         const saldo = {
           id:                crypto.randomUUID(),
           venta_id:          cuotaInfoSeleccionada.venta_id,
           alumno_id:         cuotaInfoSeleccionada.alumno_id,
           n_cuota:           (cuotaInfoSeleccionada.n_cuota || 1) + 1,
           monto:             Math.round(delta * 100) / 100,
-          fecha_vencimiento: nextFvenc.toISOString(),
+          fecha_vencimiento: nextFvenc,
           fecha_pago:        null,
           estado:            'Pendiente',
           setter:            cuotaInfoSeleccionada.setter || null,
@@ -282,7 +277,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
         const { error: errS } = await supabase.from('cuotas').insert([saldo]);
         if (errS) throw errS;
         setCuotas(prev => [saldo, ...prev.map(c => c.id === rpCuota ? { ...c, ...pagoUpdates } : c)]);
-        alert(`✅ Pago parcial registrado. Se creó cuota de saldo por ${fmtMoney(delta)} con vencimiento ${fmtDate(nextFvenc.toISOString())}.`);
+        alert(`✅ Pago parcial registrado. Se creó cuota de saldo por ${fmtMoney(delta)} con vencimiento ${fmtDate(nextFvenc)}.`);
 
       } else {
         // ── Caso C: pagó exacto o de más ─────────────────────────────────────────
@@ -306,9 +301,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     for (const k of req) if (!form[k]) return alert(`"${k}" es requerido.`);
     setAltaLoading(true);
     try {
-      const fInicio = new Date(form.fechaInicio + 'T12:00:00');
+      const fInicio = form.fechaInicio;
       const duracion = PROGRAM_DURATION[form.programa] || 4;
-      const fFin = addMonths(fInicio, duracion);
+      const fFin = sumarMeses(fInicio, duracion);
       const montoTotal = parseFloat(form.montoTotal), nCuotas = parseInt(form.nCuotas);
       const pagoEnLlamada = parseFloat(form.pagoEnLlamada || 0);
       const alumnoId = crypto.randomUUID();
@@ -316,7 +311,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       const nuevoAlumno = {
         id: alumnoId, nombre: form.nombre, email: form.email,
         telefono: form.whatsapp || null, programa: form.programa,
-        fecha_inicio: fInicio.toISOString(), fecha_fin: fFin.toISOString(),
+        fecha_inicio: fInicio, fecha_fin: fFin,
         setter: form.setter || null, closer: form.closer || null,
         estado: 'Activo',
       };
@@ -325,13 +320,13 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
       const nuevaVenta = {
         id: crypto.randomUUID(), alumno_id: alumnoId, programa: form.programa, monto: montoTotal,
-        fecha_venta: new Date().toISOString(), fecha_inicio: fInicio.toISOString(), fecha_fin: fFin.toISOString(),
+        fecha_venta: hoy(), fecha_inicio: fInicio, fecha_fin: fFin,
         n_cuotas: nCuotas, setter: form.setter || null, closer: form.closer || null, es_renovacion: false,
       };
       const { error: errV } = await supabase.from('ventas').insert([nuevaVenta]);
       if (errV) throw errV;
 
-      const nuevasCuotas = armarCuotas({ alumnoId, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada, fInicio, setter: form.setter, closer: form.closer });
+      const nuevasCuotas = armarCuotas({ alumnoId, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada, fechaInicio: fInicio, setter: form.setter, closer: form.closer });
       const { error: errC } = await supabase.from('cuotas').insert(nuevasCuotas);
       if (errC) throw errC;
 
@@ -346,10 +341,10 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
   // ── Tab 6: Comisiones ───────────────────────────────────────────────────
   // Mes por defecto: el mes ANTERIOR (cerramos el mes que pasó y pagamos el 1ero)
-  const prevDate = new Date();
-  prevDate.setMonth(prevDate.getMonth() - 1);
-  const [comMes, setComMes]     = useState(prevDate.getMonth() + 1);  // 1-12
-  const [comAnio, setComAnio]   = useState(prevDate.getFullYear());
+  const mesAnterior = sumarMeses(`${hoy().slice(0, 7)}-01`, -1);
+  const [comMes, setComMes]     = useState(Number(mesAnterior.slice(5, 7)));  // 1-12
+  const [comAnio, setComAnio]   = useState(Number(mesAnterior.slice(0, 4)));
+  const comMesClave = `${comAnio}-${String(comMes).padStart(2, '0')}`;
   const [comSaving, setComSaving] = useState(false);
 
   const nombrePersona = (s) => (s ? String(s).trim() || null : null);
@@ -358,10 +353,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const cuotasDelMes = useMemo(() => {
     return cuotas.filter(c => {
       if (c.estado !== 'Pagado' || !c.fecha_pago) return false;
-      const d = new Date(c.fecha_pago);
-      return d.getUTCMonth() + 1 === comMes && d.getUTCFullYear() === comAnio;
+      return mesDe(c.fecha_pago) === comMesClave;
     });
-  }, [cuotas, comMes, comAnio]);
+  }, [cuotas, comMesClave]);
 
   // Calcula comisiones agrupadas por persona
   const comisionesResumen = useMemo(() => {
@@ -412,8 +406,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       }
       setCuotas(prev => prev.map(c => {
         if (c.estado !== 'Pagado' || !c.fecha_pago) return c;
-        const d = new Date(c.fecha_pago);
-        if (d.getUTCMonth() + 1 !== comMes || d.getUTCFullYear() !== comAnio) return c;
+        if (mesDe(c.fecha_pago) !== comMesClave) return c;
         const setter = nombrePersona(c.setter);
         const closer = nombrePersona(c.closer);
         const monto  = Number(c.monto);
@@ -439,7 +432,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const onRenAlumnoSelect = (a) => {
     setRenAlumno(a);
     if (!a) return setRenForm(emptyRen);
-    const sugeridaInicio = a.fecha_fin ? a.fecha_fin.split('T')[0] : new Date().toISOString().split('T')[0];
+    const sugeridaInicio = a.fecha_fin ? String(a.fecha_fin).slice(0, 10) : hoy();
     setRenForm(f => ({ ...f, programa: a.programa || '', fechaInicio: sugeridaInicio, setter: a.setter || '', closer: a.closer || '' }));
   };
 
@@ -449,17 +442,17 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     for (const k of req) if (!renForm[k]) return alert(`"${k}" es requerido.`);
     setRenLoading(true);
     try {
-      const fInicio    = new Date(renForm.fechaInicio + 'T12:00:00');
+      const fInicio    = renForm.fechaInicio;
       const duracion   = PROGRAM_DURATION[renForm.programa] || 4;
-      const fFin       = addMonths(fInicio, duracion);
+      const fFin       = sumarMeses(fInicio, duracion);
       const montoTotal = parseFloat(renForm.montoTotal);
       const nCuotas    = parseInt(renForm.nCuotas);
       const pagoCuota1 = parseFloat(renForm.pagoEnLlamada || 0);
 
       // 1. Actualizar alumno
       const alumnoUpdates = {
-        programa: renForm.programa, fecha_inicio: fInicio.toISOString(),
-        fecha_fin: fFin.toISOString(), estado: 'Activo',
+        programa: renForm.programa, fecha_inicio: fInicio,
+        fecha_fin: fFin, estado: 'Activo',
         setter: renForm.setter || null, closer: renForm.closer || null,
       };
       const { error: errA } = await supabase.from('alumnos').update(alumnoUpdates).eq('id', renAlumno.id);
@@ -468,14 +461,14 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       // 2. Crear la venta de renovación
       const nuevaVenta = {
         id: crypto.randomUUID(), alumno_id: renAlumno.id, programa: renForm.programa, monto: montoTotal,
-        fecha_venta: new Date().toISOString(), fecha_inicio: fInicio.toISOString(), fecha_fin: fFin.toISOString(),
+        fecha_venta: hoy(), fecha_inicio: fInicio, fecha_fin: fFin,
         n_cuotas: nCuotas, setter: renForm.setter || null, closer: renForm.closer || null, es_renovacion: true,
       };
       const { error: errV } = await supabase.from('ventas').insert([nuevaVenta]);
       if (errV) throw errV;
 
       // 3. Crear nuevas cuotas
-      const nuevasCuotas = armarCuotas({ alumnoId: renAlumno.id, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada: pagoCuota1, fInicio, setter: renForm.setter, closer: renForm.closer });
+      const nuevasCuotas = armarCuotas({ alumnoId: renAlumno.id, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada: pagoCuota1, fechaInicio: fInicio, setter: renForm.setter, closer: renForm.closer });
       const { error: errC } = await supabase.from('cuotas').insert(nuevasCuotas);
       if (errC) throw errC;
 
@@ -843,13 +836,13 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <div className="note is-positive">
               <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas</div>
               {Array.from({ length: Math.min(parseInt(form.nCuotas)||0, 12) }, (_, i) => {
-                const fv = addMonths(new Date(form.fechaInicio+'T12:00:00'), i);
+                const fv = sumarMeses(form.fechaInicio, i);
                 const p1 = parseFloat(form.pagoEnLlamada)>0 ? parseFloat(form.pagoEnLlamada) : parseFloat(form.montoTotal)/parseInt(form.nCuotas);
                 const pr = parseInt(form.nCuotas)>1 ? (parseFloat(form.montoTotal)-p1)/(parseInt(form.nCuotas)-1) : 0;
                 const pagada = i===0 && parseFloat(form.pagoEnLlamada)>0;
                 return (
                   <div key={i} style={{ display:'flex', justifyContent:'space-between', gap: '12px', padding:'7px 0', borderBottom: i<parseInt(form.nCuotas)-1?'1px solid var(--border)':'none' }}>
-                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv.toISOString())}</span>
+                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv)}</span>
                     <span className={pagada ? 'is-positive-text' : 'is-warning-text'} style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
                       {fmtMoney(i===0?p1:pr)} · {pagada ? 'pagada' : 'pendiente'}
                     </span>
@@ -900,13 +893,13 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <div className="note is-accent">
               <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas de la renovación</div>
               {Array.from({ length: Math.min(parseInt(renForm.nCuotas)||0, 12) }, (_, i) => {
-                const fv = addMonths(new Date(renForm.fechaInicio+'T12:00:00'), i);
+                const fv = sumarMeses(renForm.fechaInicio, i);
                 const p1 = parseFloat(renForm.pagoEnLlamada)>0 ? parseFloat(renForm.pagoEnLlamada) : parseFloat(renForm.montoTotal)/parseInt(renForm.nCuotas);
                 const pr = parseInt(renForm.nCuotas)>1 ? (parseFloat(renForm.montoTotal)-p1)/(parseInt(renForm.nCuotas)-1) : 0;
                 const pagada = i===0 && parseFloat(renForm.pagoEnLlamada)>0;
                 return (
                   <div key={i} style={{ display:'flex', justifyContent:'space-between', gap: '12px', padding:'7px 0', borderBottom: i<parseInt(renForm.nCuotas)-1?'1px solid var(--border)':'none' }}>
-                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv.toISOString())}</span>
+                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv)}</span>
                     <span className={pagada ? 'is-positive-text' : 'is-warning-text'} style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
                       {fmtMoney(i===0?p1:pr)} · {pagada ? 'pagada' : 'pendiente'}
                     </span>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Users, Search, GraduationCap, AlertTriangle, TrendingDown, CheckCircle, Calendar, Mail, Phone, Award, Snowflake, Play, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { hoy, sumarMeses, sumarDias, diasEntre, esFecha, fmtFecha } from '../fechas';
 
 const ESTADOS_VALIDOS = ['Activo', 'Por vencer', 'Vencido', 'Pausado', 'Churneado'];
 
@@ -20,26 +21,14 @@ const getStatusConfig = (status) => {
 
 const renderProg = (prog) => (prog ? String(prog) : '-');
 
-const formatDate = (ds) => {
-  if (!ds) return '-';
-  const d = new Date(ds);
-  if (isNaN(d)) return '-';
-  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
-};
+const formatDate = fmtFecha;
 
-const toDateInput = (ds) => {
-  if (!ds) return '';
-  const d = new Date(ds);
-  if (isNaN(d)) return '';
-  return d.toISOString().split('T')[0];
-};
+const toDateInput = (ds) => (esFecha(ds) ? String(ds).slice(0, 10) : '');
 
+// Fin del programa: inicio + duración + los días que estuvo congelado.
 const calcFin = (fInicio, duracionMeses, diasCongelados = 0) => {
-  if (!fInicio || !duracionMeses) return null;
-  const d = new Date(fInicio);
-  d.setMonth(d.getMonth() + Number(duracionMeses));
-  d.setDate(d.getDate() + (diasCongelados || 0));
-  return d;
+  if (!esFecha(fInicio) || !duracionMeses) return null;
+  return sumarDias(sumarMeses(fInicio, Number(duracionMeses)), diasCongelados || 0);
 };
 
 const getDuracionFromProg = (progStr) => {
@@ -109,7 +98,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
   const pausados  = alumnos.filter(a => a.congelado_desde);
   const porVencer = alumnos.filter(a => {
     if (!a.fecha_fin || a.fecha_baja) return false;
-    const diff = (new Date(a.fecha_fin) - new Date()) / (1000 * 60 * 60 * 24);
+    const diff = diasEntre(hoy(), a.fecha_fin);
     return diff >= 0 && diff <= 15;
   });
 
@@ -134,11 +123,11 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
     // Si cambia fecha_inicio o duracion_meses → recalcular fecha_fin
     if (field === 'fecha_inicio' || field === 'duracion_meses') {
       const alumno = alumnos.find(a => a.id === alumnoId);
-      const inicio = new Date(field === 'fecha_inicio' ? rawValue : alumno.fecha_inicio);
+      const inicio = field === 'fecha_inicio' ? rawValue : alumno.fecha_inicio;
       const meses  = Number(field === 'duracion_meses' ? rawValue : (alumno.duracion_meses || getDuracionFromProg(alumno.programa)));
       const diasCongelados = alumno.dias_congelados || 0;
       const nuevaFin = calcFin(inicio, meses, diasCongelados);
-      if (nuevaFin) updates.fecha_fin = nuevaFin.toISOString();
+      if (nuevaFin) updates.fecha_fin = nuevaFin;
     }
 
     // Update optimístico local
@@ -153,7 +142,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
 
   // ── Congelar ──
   const congelarAlumno = async (alumno) => {
-    const updates = { estado: 'Pausado', congelado_desde: new Date().toISOString() };
+    const updates = { estado: 'Pausado', congelado_desde: hoy() };
     setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...updates } : a));
     setSelectedStudent(s => s?.id === alumno.id ? { ...s, ...updates } : s);
     await supabase.from('alumnos').update(updates).eq('id', alumno.id);
@@ -161,19 +150,16 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
 
   // ── Descongelar ──
   const descongelarAlumno = async (alumno) => {
-    const ahora = new Date();
-    const inicio = new Date(alumno.congelado_desde);
-    const diasEstaVez = Math.ceil((ahora - inicio) / (1000 * 60 * 60 * 24));
+    const diasEstaVez = Math.max(0, diasEntre(alumno.congelado_desde, hoy()));
     const totalCongelados = (alumno.dias_congelados || 0) + diasEstaVez;
 
-    const nuevaFin = new Date(alumno.fecha_fin);
-    nuevaFin.setDate(nuevaFin.getDate() + diasEstaVez);
+    const nuevaFin = alumno.fecha_fin ? sumarDias(alumno.fecha_fin, diasEstaVez) : null;
 
     const updates = {
       estado: 'Activo',
       congelado_desde: null,
       dias_congelados: totalCongelados,
-      fecha_fin: nuevaFin.toISOString(),
+      fecha_fin: nuevaFin,
     };
     setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...updates } : a));
     setSelectedStudent(s => s?.id === alumno.id ? { ...s, ...updates } : s);
@@ -181,8 +167,8 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
   };
 
   const getDaysLeft = (fFin) => {
-    if (!fFin) return null;
-    return Math.ceil((new Date(fFin) - new Date()) / (1000 * 60 * 60 * 24));
+    if (!esFecha(fFin)) return null;
+    return diasEntre(hoy(), fFin);
   };
 
   // ── UI ──
@@ -389,7 +375,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
             const daysLeft = getDaysLeft(selectedStudent.fecha_fin);
             const isCongelado = !!selectedStudent.congelado_desde;
             const diasCongeladosActuales = isCongelado
-              ? Math.ceil((new Date() - new Date(selectedStudent.congelado_desde)) / (1000 * 60 * 60 * 24))
+              ? Math.max(0, diasEntre(selectedStudent.congelado_desde, hoy()))
               : 0;
 
             return (
