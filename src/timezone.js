@@ -74,7 +74,7 @@ export function addDaysToDateKey(dateKey, days) {
   return utc.toISOString().slice(0, 10);
 }
 
-function zonedTimeToUtc(dateKey, time = '00:00:00', timeZone = APP_TIME_ZONE) {
+export function zonedTimeToUtc(dateKey, time = '00:00:00', timeZone = APP_TIME_ZONE) {
   const [year, month, day] = dateKey.split('-').map(Number);
   const [hour, minute, second] = time.split(':').map(Number);
 

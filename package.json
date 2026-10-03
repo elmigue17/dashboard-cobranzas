@@ -9,7 +9,15 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --test",
-    "usuario": "node scripts/usuario.mjs"
+    "usuario": "node scripts/usuario.mjs",
+    "datos:ejemplo": "node scripts/datos-ejemplo.mjs",
+    "datos:vaciar": "node scripts/vaciar.mjs",
+    "db:local": "npx -y supabase@2.119.0 start",
+    "db:local:apagar": "npx -y supabase@2.119.0 stop",
+    "configurar:local": "node scripts/configurar-local.mjs",
+    "db:migrar": "node scripts/migrar.mjs",
+    "importar": "node scripts/importar.mjs",
+    "resumen": "node scripts/resumen.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",

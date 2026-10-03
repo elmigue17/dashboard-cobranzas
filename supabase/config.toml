@@ -66,7 +66,7 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-# Apagado: los datos se cargan aparte, nunca con un reset.
+# Apagado: los datos se cargan con `npm run datos:ejemplo` o `npm run importar`.
 enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
