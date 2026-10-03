@@ -89,13 +89,19 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
               No hay llamadas programadas para este día.
             </div>
           ) : (
-            filteredCalls.map(call => (
+            filteredCalls.map(call => {
+              // Cada lado del borde por separado: mezclar `border` con `borderLeft` hace que React
+              // avise en la consola al seleccionar otra llamada.
+              const lado = `1px solid ${selectedCall?.id === call.id ? 'var(--accent-border)' : 'var(--border)'}`;
+              return (
               <div
                 key={call.id}
                 onClick={() => setSelectedCall(call)}
                 style={{
                   background: selectedCall?.id === call.id ? 'var(--accent-soft)' : 'var(--surface-2)',
-                  border: `1px solid ${selectedCall?.id === call.id ? 'var(--accent-border)' : 'var(--border)'}`,
+                  borderTop: lado,
+                  borderRight: lado,
+                  borderBottom: lado,
                   borderLeft: `3px solid ${getStatusColor(call.estado)}`,
                   borderRadius: 'var(--radius)',
                   padding: '14px 16px',
@@ -120,7 +126,8 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
                   <span>Closer: {call.closer || 'Sin asignar'}</span>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
