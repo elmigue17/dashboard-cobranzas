@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
 import { PROGRAM_OPTIONS, duracionDePrograma } from '../programas';
+import { nombrePersona, columnasComision, resumenPorPersona } from '../comisiones';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
   UserPlus, CreditCard, BarChart2, CheckCircle, XCircle,
@@ -346,8 +347,6 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const comMesClave = `${comAnio}-${String(comMes).padStart(2, '0')}`;
   const [comSaving, setComSaving] = useState(false);
 
-  const nombrePersona = (s) => (s ? String(s).trim() || null : null);
-
   // Cuotas pagadas en el mes seleccionado
   const cuotasDelMes = useMemo(() => {
     return cuotas.filter(c => {
@@ -356,64 +355,21 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     });
   }, [cuotas, comMesClave]);
 
-  // Calcula comisiones agrupadas por persona
-  const comisionesResumen = useMemo(() => {
-    const map = {}; // { nombre: { rol, cuotas: [], total } }
-    cuotasDelMes.forEach(c => {
-      const monto = Number(c.monto);
-      const setter = nombrePersona(c.setter);
-      const closer = nombrePersona(c.closer);
-      if (setter) {
-        if (!map[setter]) map[setter] = { rol: 'Setter', cuotas: [], totalBase: 0 };
-        map[setter].cuotas.push({ ...c, comision: Math.round(monto * 0.10 * 100) / 100 });
-        map[setter].totalBase += monto;
-      }
-      if (closer && closer !== setter) {
-        const key = `${closer}_closer`;
-        if (!map[key]) map[key] = { nombre: closer, rol: 'Closer', cuotas: [], totalBase: 0 };
-        map[key].cuotas.push({ ...c, comision: Math.round(monto * 0.10 * 100) / 100 });
-        map[key].totalBase += monto;
-      } else if (closer && closer === setter) {
-        // misma persona es setter y closer → 20%
-        if (!map[setter]) map[setter] = { rol: 'Setter+Closer', cuotas: [], totalBase: 0 };
-        map[setter].rol = 'Setter+Closer';
-      }
-    });
-    return Object.entries(map).map(([key, v]) => ({
-      nombre:    v.nombre || key.replace('_closer', ''),
-      rol:       v.rol,
-      cuotas:    v.cuotas,
-      totalBase: v.totalBase,
-      total:     v.rol === 'Setter+Closer'
-        ? Math.round(v.totalBase * 0.20 * 100) / 100
-        : Math.round(v.totalBase * 0.10 * 100) / 100,
-    })).sort((a, b) => b.total - a.total);
-  }, [cuotasDelMes]);
+  // Comisiones por persona. El rol (setter, closer o los dos) se decide cuota por cuota:
+  // quien fue setter+closer solo en algunas cuotas cobra el porcentaje doble solo en esas.
+  const comisionesResumen = useMemo(() => resumenPorPersona(cuotasDelMes), [cuotasDelMes]);
 
   const handleGuardarComisiones = async () => {
     setComSaving(true);
     try {
       for (const c of cuotasDelMes) {
-        const setter = nombrePersona(c.setter);
-        const closer = nombrePersona(c.closer);
-        const monto  = Number(c.monto);
-        const { error } = await supabase.from('cuotas').update({
-          comision_setter: setter ? Math.round(monto * 0.10 * 100) / 100 : null,
-          comision_closer: closer ? Math.round(monto * 0.10 * 100) / 100 : null,
-        }).eq('id', c.id);
+        const { error } = await supabase.from('cuotas').update(columnasComision(c)).eq('id', c.id);
         if (error) throw error;
       }
       setCuotas(prev => prev.map(c => {
         if (c.estado !== 'Pagado' || !c.fecha_pago) return c;
         if (mesDe(c.fecha_pago) !== comMesClave) return c;
-        const setter = nombrePersona(c.setter);
-        const closer = nombrePersona(c.closer);
-        const monto  = Number(c.monto);
-        return {
-          ...c,
-          comision_setter: setter ? Math.round(monto * 0.10 * 100) / 100 : null,
-          comision_closer: closer ? Math.round(monto * 0.10 * 100) / 100 : null,
-        };
+        return { ...c, ...columnasComision(c) };
       }));
       alert(`✅ Comisiones del mes guardadas en ${cuotasDelMes.length} cuota(s).`);
     } catch (err) { alert('Error: ' + err.message); }
@@ -947,17 +903,19 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               {/* Cards resumen por persona */}
               <div className="grid-stats">
                 {comisionesResumen.map(c => (
-                  <div key={c.nombre + c.rol} className="stat-card">
+                  <div key={c.nombre} className="stat-card">
                     <div className="stat-head">
                       <div>
                         <div style={{ fontWeight: 650, fontSize: '1rem' }}>{c.nombre}</div>
-                        <div className="stat-label" style={{ marginTop: '4px' }}>
-                          {c.rol} · {c.rol === 'Setter+Closer' ? '20%' : '10%'}
-                        </div>
+                        {c.roles.map(r => (
+                          <div key={r.rol} className="stat-label" style={{ marginTop: '4px' }}>
+                            {r.rol} · {r.porcentaje}% de {fmtMoney(r.base)}
+                          </div>
+                        ))}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div className="stat-value is-positive-text" style={{ fontSize: '1.35rem' }}>{fmtMoney(c.total)}</div>
-                        <div className="stat-hint">{c.cuotas.length} cuota(s)</div>
+                        <div className="stat-hint">{c.filas} cuota(s)</div>
                       </div>
                     </div>
                     <div className="meter">
@@ -985,6 +943,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                         const setter = nombrePersona(c.setter);
                         const closer = nombrePersona(c.closer);
                         const monto  = Number(c.monto);
+                        const com    = columnasComision(c);
                         return (
                           <tr key={c.id}>
                             <td className="cell-strong">{nombreAlumno(c)}</td>
@@ -992,9 +951,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                             <td data-label="Monto" style={{ fontWeight: 650 }}>{fmtMoney(monto)}</td>
                             <td data-label="Fecha pago" className="cell-muted">{fmtDate(c.fecha_pago)}</td>
                             <td data-label="Setter">{setter || <span className="cell-muted">-</span>}</td>
-                            <td data-label="Com. setter" className={setter ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{setter ? fmtMoney(monto * 0.10) : '-'}</td>
+                            <td data-label="Com. setter" className={setter ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{com.comision_setter != null ? fmtMoney(com.comision_setter) : '-'}</td>
                             <td data-label="Closer">{closer || <span className="cell-muted">-</span>}</td>
-                            <td data-label="Com. closer" className={closer ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{closer ? fmtMoney(monto * 0.10) : '-'}</td>
+                            <td data-label="Com. closer" className={closer ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{com.comision_closer != null ? fmtMoney(com.comision_closer) : '-'}</td>
                           </tr>
                         );
                       })}
@@ -1003,11 +962,11 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                       <tr style={{ background: 'var(--surface-2)' }}>
                         <td colSpan={5} style={{ fontWeight: 650, color: 'var(--text-secondary)' }}>Total del mes</td>
                         <td data-label="Total setters" className="is-positive-text" style={{ fontWeight: 700 }}>
-                          {fmtMoney(cuotasDelMes.filter(c => nombrePersona(c.setter)).reduce((s, c) => s + Number(c.monto) * 0.10, 0))}
+                          {fmtMoney(cuotasDelMes.reduce((s, c) => s + (columnasComision(c).comision_setter || 0), 0))}
                         </td>
                         <td />
                         <td data-label="Total closers" className="is-positive-text" style={{ fontWeight: 700 }}>
-                          {fmtMoney(cuotasDelMes.filter(c => nombrePersona(c.closer)).reduce((s, c) => s + Number(c.monto) * 0.10, 0))}
+                          {fmtMoney(cuotasDelMes.reduce((s, c) => s + (columnasComision(c).comision_closer || 0), 0))}
                         </td>
                       </tr>
                     </tfoot>
