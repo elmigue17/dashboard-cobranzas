@@ -5,6 +5,7 @@
 //   npm run usuario -- dar-acceso correo@ejemplo.com      da acceso a un usuario que ya existe
 //                                                         (por ejemplo, creado desde el panel de Supabase)
 //   npm run usuario -- quitar-acceso correo@ejemplo.com   le quita el acceso (no borra la cuenta)
+//   npm run usuario -- nueva-clave correo@ejemplo.com     le pone una contraseña temporal nueva
 //   npm run usuario -- listar                             muestra quién tiene acceso
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -74,11 +75,20 @@ if (accion === 'crear') {
   const { error } = await supabase.from('acceso').delete().eq('user_id', usuario.id);
   if (error) salir('No se pudo quitar el acceso: ' + error.message);
   console.log(`${email} ya no tiene acceso (la cuenta sigue existiendo).`);
+} else if (accion === 'nueva-clave') {
+  if (!email.includes('@')) salir('Uso: npm run usuario -- nueva-clave correo@ejemplo.com');
+  const usuario = await buscarUsuario(email);
+  if (!usuario) salir(`No existe ningún usuario con el correo ${email}.`);
+  const clave = claveTemporal();
+  const { error } = await supabase.auth.admin.updateUserById(usuario.id, { password: clave });
+  if (error) salir('No se pudo cambiar la contraseña: ' + error.message);
+  console.log(`Contraseña temporal nueva para ${email}: ${clave}`);
+  console.log('Que la cambie al entrar (barra lateral > Contraseña).');
 } else if (accion === 'listar') {
   const { data, error } = await supabase.from('acceso').select('email, created_at').order('created_at');
   if (error) salir('No se pudo leer la lista: ' + error.message);
   if (!data.length) console.log('Nadie tiene acceso todavía.');
   for (const fila of data) console.log(`${fila.email}  (desde ${fila.created_at.slice(0, 10)})`);
 } else {
-  salir('Uso: npm run usuario -- crear|dar-acceso|quitar-acceso correo@ejemplo.com, o npm run usuario -- listar');
+  salir('Uso: npm run usuario -- crear|dar-acceso|quitar-acceso|nueva-clave correo@ejemplo.com, o npm run usuario -- listar');
 }

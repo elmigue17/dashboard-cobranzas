@@ -17,7 +17,9 @@
     "configurar:local": "node scripts/configurar-local.mjs",
     "db:migrar": "node scripts/migrar.mjs",
     "importar": "node scripts/importar.mjs",
-    "resumen": "node scripts/resumen.mjs"
+    "resumen": "node scripts/resumen.mjs",
+    "verificar": "node scripts/verificar.mjs",
+    "exportar": "node scripts/exportar.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
