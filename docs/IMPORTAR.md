@@ -27,6 +27,7 @@ npm run resumen                                           # cómo quedó la base
 {
   "alumnos": [
     {
+      "fila": 12,
       "nombre": "Nombre Apellido",
       "email": "correo@ejemplo.com",
       "telefono": "+51 999 999 999",
@@ -64,6 +65,7 @@ npm run resumen                                           # cómo quedó la base
 
 | Campo | Obligatorio | Qué es |
 |---|---|---|
+| `fila` | no | La fila de la planilla original. Conviene ponerla siempre: los avisos y errores la citan, así se sabe dónde mirar. |
 | `nombre` | sí | Nombre y apellido. |
 | `email`, `telefono`, `notas` | no | Texto libre. |
 | `estado` | no | Solo hace falta para `Pausado` (congelado) o `Churneado` (se dio de baja). `Activo`, `Por vencer` y `Vencido` se calculan solos con la fecha de fin. |

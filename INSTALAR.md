@@ -204,9 +204,10 @@ suyo: `npm run datos:vaciar -- --si` y vuelve a este paso.
    `negocio.config.js` hay que agregarlo (con su duración y precio).
 5. **Recién con todo confirmado**, escribe un script `mis-datos/convertir.mjs` (node, sin librerías)
    que lea los CSV y escriba `mis-datos/importar.json` con el formato de
-   [docs/IMPORTAR.md](docs/IMPORTAR.md). Lo que no pueda interpretar va a `no_interpretado` con el
-   motivo; nunca lo inventes ni lo descartes en silencio. Que sea un script y no un archivo a mano:
-   así se puede corregir y volver a correr.
+   [docs/IMPORTAR.md](docs/IMPORTAR.md). Ponle a cada alumno su `fila` de la planilla, así los avisos
+   dicen dónde mirar. Lo que no pueda interpretar va a `no_interpretado` con el motivo; nunca lo
+   inventes ni lo descartes en silencio. Que sea un script y no un archivo a mano: así se puede
+   corregir y volver a correr.
 6. `npm run importar -- mis-datos/importar.json --probar`. Revisa con la persona los **errores**
    (no deja cargar nada) y los **avisos**. Corrige el script y repite hasta que no haya errores y los
    avisos que queden estén entendidos.

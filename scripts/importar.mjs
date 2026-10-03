@@ -57,15 +57,17 @@ if (!Array.isArray(datos.alumnos)) {
 } else {
   const nombresVistos = new Map();
   datos.alumnos.forEach((a, i) => {
-    const quien = a?.nombre ? `"${a.nombre}"` : `alumno #${i + 1}`;
+    // "fila" (opcional) es la fila de la planilla original: así los avisos dicen dónde mirar.
+    const donde = a?.fila != null ? `fila ${a.fila}` : `#${i + 1}`;
+    const quien = a?.nombre ? `"${a.nombre}" (${donde})` : `alumno ${donde}`;
     const nombre = texto(a?.nombre);
     if (!nombre) {
       errores.push(`${quien}: falta el nombre.`);
       return;
     }
     const clave = nombre.toLowerCase();
-    if (nombresVistos.has(clave)) avisos.push(`${quien} aparece dos veces (#${nombresVistos.get(clave)} y #${i + 1}). Se cargan como dos alumnos distintos.`);
-    nombresVistos.set(clave, i + 1);
+    if (nombresVistos.has(clave)) avisos.push(`"${nombre}" aparece dos veces (${nombresVistos.get(clave)} y ${donde}). Se cargan como dos alumnos distintos.`);
+    nombresVistos.set(clave, donde);
 
     let estado = texto(a.estado) || 'Activo';
     if (!ESTADOS_ALUMNO.includes(estado)) {
