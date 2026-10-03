@@ -153,8 +153,9 @@ Guíalo **de a una acción por mensaje** y espera su "listo" en cada una:
    si lo pide, reinicia). Después que lo abra y espere a que diga que está corriendo.
 2. `npm run db:local`. La primera vez baja las imágenes de Supabase (cerca de 2 GB, puede tardar de 5 a
    15 minutos): avísale antes. Crea la base y aplica las migraciones sola.
-3. `npm run configurar:local`. Escribe `.env.local` con las claves locales (son claves de desarrollo
-   que solo sirven en su computadora).
+   Al terminar muestra en pantalla unas claves: son las claves de desarrollo de Supabase, iguales
+   para todo el mundo y que solo sirven en su computadora. No son secretas; no hace falta ocultarlas.
+3. `npm run configurar:local`. Escribe `.env.local` con esas claves locales.
 4. Cuéntale que tiene un panel para ver las tablas en http://127.0.0.1:54423 (Supabase Studio).
 
 ### En las dos opciones
@@ -198,12 +199,24 @@ suyo: `npm run datos:vaciar -- --si` y vuelve a este paso.
    repetidos, filas sin monto.
 4. **Propón cómo va cada columna** en una tabla: columna del CSV, a qué campo va (alumno, venta o
    cuota, según [docs/IMPORTAR.md](docs/IMPORTAR.md)) y cómo se interpreta. Después haz, **de a una**,
-   las preguntas que hagan falta para decidir lo dudoso. Por ejemplo: a qué año corresponden las
-   fechas sin año; qué significa una columna como "PIF"; cuáles cuotas están pagadas y cuáles no;
-   qué hacer con las filas que no tienen monto; si un programa del CSV que no está en
-   `negocio.config.js` hay que agregarlo (con su duración y precio).
+   las preguntas que hagan falta para decidir lo dudoso. Las que casi siempre aparecen:
+   - **¿Qué día exportaste la planilla?** Las cuotas que vencían después de ese día quedan
+     pendientes: avísale que después tiene que registrar las que cobró desde entonces.
+   - **¿Cómo se sabe si una cuota está pagada?** Muchas planillas no tienen una columna para eso:
+     una columna con montos puede ser lo que se pagó o solo lo que vale la cuota. Pregunta, no supongas.
+   - **¿Qué significan los textos sueltos?** ("88 de 175, RESTAN 87", "cuota 2 sin pagar",
+     "PIF", "pidió prórroga").
+   - **¿A qué año corresponden las fechas sin año?**
+   - **¿En qué fecha se pagó cada cuota?** Si la planilla no lo dice, propón usar la de vencimiento
+     y explica que de esa fecha depende en qué mes cae la comisión.
+   - **¿Quién fue el setter y el closer de cada venta?** Si no está, esas ventas quedan sin comisión
+     hasta que alguien lo complete.
+   - Programas escritos de varias formas ("12 meses 1800 usd" y "Programa Anual"): cuál es cuál, y si
+     falta alguno en `negocio.config.js`, agrégalo (con su duración y precio).
+   - Nombres repetidos: ¿es la misma persona (una renovación) o son dos personas distintas?
 5. **Recién con todo confirmado**, escribe un script `mis-datos/convertir.mjs` (node, sin librerías)
-   que lea los CSV y escriba `mis-datos/importar.json` con el formato de
+   que lea los CSV (ojo: hay celdas con comas adentro, entre comillas; léelas respetando las comillas
+   y el BOM del principio) y escriba `mis-datos/importar.json` con el formato de
    [docs/IMPORTAR.md](docs/IMPORTAR.md). Ponle a cada alumno su `fila` de la planilla, así los avisos
    dicen dónde mirar. Lo que no pueda interpretar va a `no_interpretado` con el motivo; nunca lo
    inventes ni lo descartes en silencio. Que sea un script y no un archivo a mano: así se puede
@@ -216,7 +229,9 @@ suyo: `npm run datos:vaciar -- --si` y vuelve a este paso.
 8. **Muéstrale el resultado:** cuántos alumnos, ventas y cuotas quedaron, cuántas cuotas pagadas y
    pendientes, cuánto se cobró y cuánto falta cobrar, y la lista de lo que no se pudo interpretar.
    Después elige dos o tres alumnos de los difíciles y muéstrale, lado a lado, su fila original y
-   cómo quedaron sus cuotas, para que confirme que se entendió bien.
+   cómo quedaron sus cuotas, para que confirme que se entendió bien. Cuéntale que en Finanzas >
+   Resumen va a ver la lista "Vencidas sin pagar": ahí aparecen también las que cobró después de
+   exportar la planilla, y las tiene que registrar con "Registrar pago".
 9. Anota en `NEGOCIO.md` (sección *Datos importados*) qué archivo se importó, cómo se interpretó cada
    columna, las decisiones que tomó y lo que quedó sin interpretar.
 
@@ -231,14 +246,20 @@ suyo: `npm run datos:vaciar -- --si` y vuelve a este paso.
 1. `npm run dev` en segundo plano. Abre http://localhost:5180 en su navegador (en Windows
    `start http://localhost:5180`, en Mac `open http://localhost:5180`).
 2. Que entre con su email y la contraseña temporal, y que la cambie (barra lateral > **Contraseña**).
+   La primera vez, la página puede recargarse sola una vez mientras se prepara: si se borró lo que
+   escribió, que lo vuelva a escribir.
 3. Recorrido corto, en un solo mensaje, una línea por sección:
    - **Dashboard:** los números del setter (leads, conversaciones) y del closer (asistencia, cierres).
    - **Leads:** cada prospecto, en qué estado está y de qué pieza de contenido vino.
    - **Contenido:** cada pieza con cuántos leads trajo.
    - **Llamadas:** la agenda del día y lo que contó cada lead antes de la llamada.
    - **Alumnos:** activos, los que vencen en 15 días, congelados y los que se fueron.
-   - **Finanzas:** lo cobrado en el mes, lo que falta cobrar, el historial de cuotas, registrar un
-     pago (recalcula solo si pagan de menos o de más), alta de alumnos, renovaciones y comisiones.
+   - **Finanzas:** lo cobrado en el mes, lo que falta cobrar, las cuotas vencidas sin pagar, el
+     historial de cuotas, registrar un pago (recalcula solo si pagan de menos o de más), alta de
+     alumnos, renovaciones y comisiones.
+   Si importó solo su planilla de cobranzas, **Dashboard, Leads, Contenido y Llamadas van a estar
+   vacíos**: es normal, se llenan cuando entren leads y llamadas. Lo que importó está en Alumnos y
+   Finanzas.
 4. Propón una prueba: registrar un pago de un alumno (con datos de ejemplo, uno de los tres que mostró
    el paso 4) y ver cómo se recalculan las cuotas.
 5. Cuéntale cómo se abre la próxima vez: `npm run dev` en esta carpeta (y antes `npm run db:local`
