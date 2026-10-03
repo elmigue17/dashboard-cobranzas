@@ -1,6 +1,6 @@
 
 /* ==========================================================================
-   Dashboard — Design tokens
+   Dashboard · Design tokens
    Paleta neutra + 1 acento + 3 semánticos. Sin neones ni degradados de color.
    ========================================================================== */
 
@@ -970,7 +970,7 @@ select.badge {
 .only-mobile { display: none !important; }
 
 /* ==========================================================================
-   Responsive — tablet
+   Responsive · tablet
    ========================================================================== */
 
 @media (max-width: 1180px) {
@@ -1023,7 +1023,7 @@ select.badge {
 }
 
 /* ==========================================================================
-   Responsive — móvil (objetivo: grabación vertical)
+   Responsive · móvil (objetivo: grabación vertical)
    ========================================================================== */
 
 @media (max-width: 768px) {

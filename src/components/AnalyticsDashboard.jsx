@@ -57,7 +57,7 @@ const AnalyticsDashboard = ({ leads = [], llamadas = [] }) => {
     if (dateRange === 'YESTERDAY') return 'ayer';
     if (dateRange === 'THIS_MONTH') return 'este mes';
     if (dateRange === 'LAST_MONTH') return 'mes pasado';
-    if (dateRange === 'CUSTOM') return `${customStartDate || '?'} — ${customEndDate || '?'}`;
+    if (dateRange === 'CUSTOM') return `${customStartDate || '?'} a ${customEndDate || '?'}`;
     return 'histórico';
   };
 
@@ -178,7 +178,7 @@ const AnalyticsDashboard = ({ leads = [], llamadas = [] }) => {
               onChange={(e) => setCustomStartDate(e.target.value)}
               style={{ width: 'auto' }}
             />
-            <span style={{ color: 'var(--text-muted)' }}>—</span>
+            <span style={{ color: 'var(--text-muted)' }}>a</span>
             <input
               type="date"
               className="glass-input"
@@ -193,7 +193,7 @@ const AnalyticsDashboard = ({ leads = [], llamadas = [] }) => {
       <div>
         <div className="section-title">
           <span className="section-rule" />
-          Setter — {getRangeLabel()}
+          Setter · {getRangeLabel()}
         </div>
         <div style={{ marginBottom: '14px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           Zona horaria: {APP_TIME_ZONE}
@@ -277,7 +277,7 @@ const AnalyticsDashboard = ({ leads = [], llamadas = [] }) => {
       <div>
         <div className="section-title">
           <span className="section-rule" style={{ background: 'var(--positive)' }} />
-          Closer — {getRangeLabel()}
+          Closer · {getRangeLabel()}
         </div>
 
         <div className="grid-stats">
@@ -289,7 +289,7 @@ const AnalyticsDashboard = ({ leads = [], llamadas = [] }) => {
             hint={`${presentadas.length} asistieron de ${callsInRange.length} agendadas`}
           />
           <RateCard
-            label="Qual rate"
+            label="Calificados"
             value={qualRate}
             Icon={CheckCircle}
             fill={Number(qualRate)}

@@ -131,12 +131,12 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
         </div>
       </div>
 
-      {/* Columna Derecha: Detalles (Sala de Triage) */}
+      {/* Columna Derecha: Detalles (lo que contó el lead) */}
       <div className={`panel detail-panel${selectedCall ? ' is-open' : ''}`} style={{ minHeight: '360px', display: 'flex', flexDirection: 'column' }}>
         {!selectedCall ? (
           <div className="empty-state" style={{ margin: 'auto' }}>
             <Target size={30} />
-            <p>Seleccioná una llamada de la agenda para ver el detalle y hacer el pre-triage.</p>
+            <p>Selecciona una llamada de la agenda para ver lo que contó el lead antes de la llamada.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', animation: 'fadeIn 0.3s ease' }}>
@@ -157,7 +157,7 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
               )}
             </div>
 
-            {/* Rejilla de Triaje */}
+            {/* Lo que contó antes de la llamada */}
             <div className="grid-form">
               {[
                 { Icon: Target, label: 'Dolores', value: selectedCall.dolores },

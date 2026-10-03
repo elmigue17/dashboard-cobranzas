@@ -13,17 +13,17 @@ const STATUS_CONFIG = {
 };
 
 const getStatusConfig = (status) => {
-  if (!status) return { color: 'var(--neutral)', label: '—' };
+  if (!status) return { color: 'var(--neutral)', label: '-' };
   const key = status.toLowerCase();
   return STATUS_CONFIG[key] || { color: 'var(--neutral)', label: status };
 };
 
-const renderProg = (prog) => (prog ? String(prog) : '—');
+const renderProg = (prog) => (prog ? String(prog) : '-');
 
 const formatDate = (ds) => {
-  if (!ds) return '—';
+  if (!ds) return '-';
   const d = new Date(ds);
-  if (isNaN(d)) return '—';
+  if (isNaN(d)) return '-';
   return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
 };
 
@@ -74,7 +74,7 @@ const EditableCell = ({ value, onSave, renderView, renderEdit }) => {
       <div
         style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
         onDoubleClick={() => { setDraft(value); setEditing(true); }}
-        title="Doble click para editar"
+        title="Doble clic para editar"
       >
         {renderView(value)}
         <Pencil size={12} style={{ color: 'var(--text-muted)', opacity: 0.4, flexShrink: 0 }} />
@@ -114,7 +114,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
   });
 
   const uniqueStatuses = useMemo(() => ['ALL', ...new Set(alumnos.map(a => a.estado).filter(Boolean))], [alumnos]);
-  const uniqueProgs    = useMemo(() => ['ALL', ...new Set(alumnos.map(a => renderProg(a.programa)).filter(p => p !== '—'))], [alumnos]);
+  const uniqueProgs    = useMemo(() => ['ALL', ...new Set(alumnos.map(a => renderProg(a.programa)).filter(p => p !== '-'))], [alumnos]);
 
   const filteredAlumnos = useMemo(() => alumnos.filter(a => {
     const matchSearch = !search ||
@@ -236,7 +236,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
 
           {/* Tip de edición */}
           <div style={{ padding: '9px 20px', fontSize: '0.76rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-            Doble click sobre Estado, Inicio o Duración para editar
+            Doble clic sobre Estado, Inicio o Duración para editar
           </div>
 
           {/* Tabla */}
@@ -276,7 +276,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {isCongelado && <Snowflake size={13} style={{ color: 'var(--warning)' }} />}
                           <div>
-                            <div style={{ fontWeight: 600 }}>{alumno.nombre || '—'}</div>
+                            <div style={{ fontWeight: 600 }}>{alumno.nombre || '-'}</div>
                             <div style={{ fontSize: '0.79rem', color: 'var(--text-muted)', fontWeight: 400 }}>{alumno.email || ''}</div>
                           </div>
                         </div>
@@ -285,7 +285,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                       {/* Programa */}
                       <td data-label="Programa" className="cell-muted">{renderProg(alumno.programa)}</td>
 
-                      {/* Estado — editable */}
+                      {/* Estado (editable) */}
                       <td data-label="Estado" onClick={e => e.stopPropagation()}>
                         <EditableCell
                           value={alumno.estado || ''}
@@ -305,7 +305,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                         />
                       </td>
 
-                      {/* Inicio — editable */}
+                      {/* Inicio (editable) */}
                       <td data-label="Inicio" onClick={e => e.stopPropagation()} className="cell-muted">
                         <EditableCell
                           value={toDateInput(alumno.fecha_inicio)}
@@ -324,12 +324,12 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                         />
                       </td>
 
-                      {/* Duración — editable */}
+                      {/* Duración (editable) */}
                       <td data-label="Duración" onClick={e => e.stopPropagation()} className="cell-muted">
                         <EditableCell
                           value={alumno.duracion_meses ?? getDuracionFromProg(alumno.programa)}
                           onSave={v => saveField(alumno.id, 'duracion_meses', Number(v))}
-                          renderView={v => <span>{v ? `${v} m` : '—'}</span>}
+                          renderView={v => <span>{v ? `${v} m` : '-'}</span>}
                           renderEdit={(draft, setDraft) => (
                             <input
                               type="number"
@@ -344,14 +344,14 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                         />
                       </td>
 
-                      {/* Vencimiento — calculado, solo lectura */}
+                      {/* Vencimiento (calculado, solo lectura) */}
                       <td data-label="Vencimiento" className="cell-muted">
                         {formatDate(alumno.fecha_fin)}
                       </td>
 
                       {/* Días restantes */}
                       <td data-label="Días rest.">
-                        {daysLeft === null ? '—' : (
+                        {daysLeft === null ? '-' : (
                           <span
                             className={isWarning ? 'is-warning-text' : daysLeft < 0 ? 'is-negative-text' : 'is-positive-text'}
                             style={{ fontWeight: 650, fontSize: '0.88rem' }}
@@ -362,7 +362,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                       </td>
 
                       {/* Closer */}
-                      <td data-label="Closer" className="cell-muted">{alumno.closer || '—'}</td>
+                      <td data-label="Closer" className="cell-muted">{alumno.closer || '-'}</td>
                     </tr>
                   );
                 })}
@@ -383,7 +383,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
           {!selectedStudent ? (
             <div className="empty-state">
               <Award size={30} />
-              <p>Seleccioná un alumno para ver su expediente.</p>
+              <p>Selecciona un alumno para ver su expediente.</p>
             </div>
           ) : (() => {
             const daysLeft = getDaysLeft(selectedStudent.fecha_fin);
@@ -478,11 +478,11 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '11px', textAlign: 'center' }}>
                     <div className="stat-label" style={{ marginBottom: '4px' }}>Setter</div>
-                    <div style={{ fontWeight: 650, fontSize: '0.88rem' }}>{selectedStudent.setter || '—'}</div>
+                    <div style={{ fontWeight: 650, fontSize: '0.88rem' }}>{selectedStudent.setter || '-'}</div>
                   </div>
                   <div style={{ flex: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '11px', textAlign: 'center' }}>
                     <div className="stat-label" style={{ marginBottom: '4px' }}>Closer</div>
-                    <div style={{ fontWeight: 650, fontSize: '0.88rem' }}>{selectedStudent.closer || '—'}</div>
+                    <div style={{ fontWeight: 650, fontSize: '0.88rem' }}>{selectedStudent.closer || '-'}</div>
                   </div>
                 </div>
 

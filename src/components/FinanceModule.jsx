@@ -15,7 +15,7 @@ const ESTADOS          = ['Pendiente', 'Pagado', 'Incobrable'];
 const addMonths = (date, n) => { const d = new Date(date); d.setMonth(d.getMonth() + n); return d; };
 
 const fmtDate = (ds) => {
-  if (!ds) return '—';
+  if (!ds) return '-';
   return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(ds));
 };
 const fmtMoney = (n) => `$${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -106,7 +106,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
   const alumnosById = useMemo(() => Object.fromEntries(alumnos.map(a => [a.id, a])), [alumnos]);
   const ventasById  = useMemo(() => Object.fromEntries(ventas.map(v => [v.id, v])), [ventas]);
-  const nombreAlumno = (c) => alumnosById[c.alumno_id]?.nombre || '—';
+  const nombreAlumno = (c) => alumnosById[c.alumno_id]?.nombre || '-';
 
   // ── Helpers de fecha (UTC para evitar desfase de zona horaria) ───────────────
   const CURRENT_YEAR = new Date().getFullYear();
@@ -444,7 +444,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   };
 
   const handleRenovacion = async () => {
-    if (!renAlumno) return alert('Seleccioná un alumno.');
+    if (!renAlumno) return alert('Selecciona un alumno.');
     const req = ['programa', 'montoTotal', 'fechaInicio', 'nCuotas'];
     for (const k of req) if (!renForm[k]) return alert(`"${k}" es requerido.`);
     setRenLoading(true);
@@ -536,14 +536,14 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             </select>
             {dateRange === 'CUSTOM' && (<>
               <input type="date" className="glass-input" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ width: 'auto' }} />
-              <span style={{ color: 'var(--text-muted)' }}>—</span>
+              <span style={{ color: 'var(--text-muted)' }}>a</span>
               <input type="date" className="glass-input" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ width: 'auto' }} />
             </>)}
           </div>
 
           <div className="grid-stats">
             {[
-              { label: 'Cash collected', value: fmtMoney(cashCollected), tone: 'is-positive', Icon: DollarSign, hint: 'Cobrado en el período' },
+              { label: 'Cobrado', value: fmtMoney(cashCollected), tone: 'is-positive', Icon: DollarSign, hint: 'Cobrado en el período' },
               { label: 'Por cobrar',     value: fmtMoney(porCobrar),     tone: 'is-warning',  Icon: Clock,      hint: 'Cuotas pendientes' },
               { label: 'Incobrable',     value: fmtMoney(incobrable),    tone: 'is-negative', Icon: XCircle,    hint: 'Dado de baja' },
               { label: 'Nuevas ventas',  value: nuevasVentas,            tone: 'is-accent',   Icon: TrendingUp, hint: 'Altas del período' },
@@ -561,7 +561,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
           <div className="panel">
             <h3 className="section-title" style={{ marginBottom: '18px' }}>
-              <BarChart2 size={15} /> Revenue por programa (histórico)
+              <BarChart2 size={15} /> Ventas por programa (histórico)
             </h3>
             {revenueByProg.map(([prog, rev]) => (
               <div key={prog} style={{ marginBottom: '15px' }}>
@@ -582,7 +582,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
           {alertasCobranza.length > 0 && (
             <div className="panel">
               <h3 className="section-title" style={{ color: 'var(--warning)' }}>
-                <AlertTriangle size={15} /> Cobranza urgente — vence en 7 días ({alertasCobranza.length})
+                <AlertTriangle size={15} /> Cobranza urgente: vence en los próximos 7 días ({alertasCobranza.length})
               </h3>
               {alertasCobranza.map(c => (
                 <div key={c.id} className="list-row">
@@ -618,7 +618,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               </select>
               {histDateRange === 'CUSTOM' && (<>
                 <input type="date" className="glass-input" value={histCustomStart} onChange={e => setHistCustomStart(e.target.value)} style={{ width: 'auto' }} />
-                <span style={{ color: 'var(--text-muted)', alignSelf: 'center' }}>—</span>
+                <span style={{ color: 'var(--text-muted)', alignSelf: 'center' }}>a</span>
                 <input type="date" className="glass-input" value={histCustomEnd} onChange={e => setHistCustomEnd(e.target.value)} style={{ width: 'auto' }} />
               </>)}
             </div>
@@ -635,7 +635,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                     return (
                       <tr key={c.id} className={isEditing ? 'is-selected' : undefined}>
                         <td className="cell-strong">{nombreAlumno(c)}</td>
-                        <td data-label="Cuota" className="cell-muted">{c.n_cuota || '—'}</td>
+                        <td data-label="Cuota" className="cell-muted">{c.n_cuota || '-'}</td>
                         <td data-label="Monto" style={{ fontWeight: 650 }}>{fmtMoney(c.monto)}</td>
                         <td data-label="F. venc." className="cell-muted">{fmtDate(c.fecha_vencimiento)}</td>
                         <td data-label="F. pago" className="cell-muted">{fmtDate(c.fecha_pago)}</td>
@@ -758,8 +758,8 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               <div>
                 <label className="field-label">Cuota *</label>
                 <select className="glass-input" value={rpCuota} onChange={e => { setRpCuota(e.target.value); setRpMonto(cuotasDelAlumno.find(c => c.id === e.target.value)?.monto || ''); }}>
-                  <option value="">— Seleccionar —</option>
-                  {cuotasDelAlumno.map(c => <option key={c.id} value={c.id}>Cuota {c.n_cuota} — {fmtMoney(c.monto)} — vence {fmtDate(c.fecha_vencimiento)}</option>)}
+                  <option value="">Seleccionar...</option>
+                  {cuotasDelAlumno.map(c => <option key={c.id} value={c.id}>Cuota {c.n_cuota} · {fmtMoney(c.monto)} · vence {fmtDate(c.fecha_vencimiento)}</option>)}
                 </select>
               </div>
             )}
@@ -783,7 +783,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                 <div className="note-title"><Zap size={15} /> Recálculo automático</div>
                 <div>Esperado: {fmtMoney(cuotaInfoSeleccionada.monto)} → pagado: {fmtMoney(rpMonto)}</div>
                 {cuotasDelAlumno.length > 1
-                  ? <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>Delta redistribuido entre {cuotasDelAlumno.length - 1} cuota(s) restante(s).</div>
+                  ? <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>La diferencia se reparte entre las {cuotasDelAlumno.length - 1} cuota(s) que quedan.</div>
                   : parseFloat(rpMonto) < Number(cuotaInfoSeleccionada.monto)
                     ? <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>Sin cuotas restantes: se creará automáticamente una cuota de saldo por {fmtMoney(Number(cuotaInfoSeleccionada.monto) - parseFloat(rpMonto))}.</div>
                     : null
@@ -833,7 +833,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <div>
               <label className="field-label">Programa *</label>
               <select className="glass-input" value={form.programa} onChange={e => setField('programa', e.target.value)}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Seleccionar...</option>
                 {PROGRAM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
@@ -841,7 +841,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
           </div>
           {form.montoTotal && form.nCuotas && form.fechaInicio && (
             <div className="note is-positive">
-              <div className="note-title"><ClipboardList size={15} /> Preview de cuotas</div>
+              <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas</div>
               {Array.from({ length: Math.min(parseInt(form.nCuotas)||0, 12) }, (_, i) => {
                 const fv = addMonths(new Date(form.fechaInicio+'T12:00:00'), i);
                 const p1 = parseFloat(form.pagoEnLlamada)>0 ? parseFloat(form.pagoEnLlamada) : parseFloat(form.montoTotal)/parseInt(form.nCuotas);
@@ -889,7 +889,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <div>
               <label className="field-label">Nuevo programa *</label>
               <select className="glass-input" value={renForm.programa} onChange={e => setRenField('programa', e.target.value)}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Seleccionar...</option>
                 {PROGRAM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
@@ -898,7 +898,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
           {renAlumno && renForm.montoTotal && renForm.nCuotas && renForm.fechaInicio && (
             <div className="note is-accent">
-              <div className="note-title"><ClipboardList size={15} /> Preview de cuotas renovadas</div>
+              <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas de la renovación</div>
               {Array.from({ length: Math.min(parseInt(renForm.nCuotas)||0, 12) }, (_, i) => {
                 const fv = addMonths(new Date(renForm.fechaInicio+'T12:00:00'), i);
                 const p1 = parseFloat(renForm.pagoEnLlamada)>0 ? parseFloat(renForm.pagoEnLlamada) : parseFloat(renForm.montoTotal)/parseInt(renForm.nCuotas);
@@ -999,10 +999,10 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                             <td data-label="Cuota" className="cell-muted">#{c.n_cuota}</td>
                             <td data-label="Monto" style={{ fontWeight: 650 }}>{fmtMoney(monto)}</td>
                             <td data-label="Fecha pago" className="cell-muted">{fmtDate(c.fecha_pago)}</td>
-                            <td data-label="Setter">{setter || <span className="cell-muted">—</span>}</td>
-                            <td data-label="Com. setter" className={setter ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{setter ? fmtMoney(monto * 0.10) : '—'}</td>
-                            <td data-label="Closer">{closer || <span className="cell-muted">—</span>}</td>
-                            <td data-label="Com. closer" className={closer ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{closer ? fmtMoney(monto * 0.10) : '—'}</td>
+                            <td data-label="Setter">{setter || <span className="cell-muted">-</span>}</td>
+                            <td data-label="Com. setter" className={setter ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{setter ? fmtMoney(monto * 0.10) : '-'}</td>
+                            <td data-label="Closer">{closer || <span className="cell-muted">-</span>}</td>
+                            <td data-label="Com. closer" className={closer ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{closer ? fmtMoney(monto * 0.10) : '-'}</td>
                           </tr>
                         );
                       })}

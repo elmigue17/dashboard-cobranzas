@@ -49,7 +49,7 @@ const VIEW_META = {
   },
   LEADS: {
     title: 'Gestión de Leads',
-    subtitle: 'Visualizá y filtrá clientes potenciales que llegaron de Instagram',
+    subtitle: 'Visualiza y filtra a los clientes potenciales que llegaron por tus redes',
   },
   CONTENT: {
     title: 'Sistema de Contenido',
@@ -700,7 +700,7 @@ function App() {
               {dateFilter === 'CUSTOM' && (
                 <>
                   <input type="date" className="glass-input" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} style={{ width: 'auto' }} />
-                  <span style={{ color: 'var(--text-muted)' }}>—</span>
+                  <span style={{ color: 'var(--text-muted)' }}>a</span>
                   <input type="date" className="glass-input" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} style={{ width: 'auto' }} />
                 </>
               )}
@@ -797,10 +797,10 @@ function App() {
                     <PanelRightOpen size={28} />
                     <div>
                       <div style={{ fontSize: '0.98rem', fontWeight: 650, color: 'var(--text)', marginBottom: '6px' }}>
-                        Abrí un lead
+                        Abre un lead
                       </div>
                       <p style={{ margin: 0, lineHeight: 1.5, fontSize: '0.88rem' }}>
-                        Tocá el usuario para ver el detalle,
+                        Toca el usuario para ver el detalle,
                         editar el estado y leer el contexto completo.
                       </p>
                     </div>
