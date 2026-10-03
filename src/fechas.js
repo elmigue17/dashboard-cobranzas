@@ -1,6 +1,6 @@
 // Fechas de calendario (vencimientos, pagos, inicio y fin de programas).
 //
-// En la base son columnas `date`: '2026-10-03', sin hora ni zona horaria. Acá se manejan siempre
+// En la base son columnas `date`: '2026-10-03', sin hora ni zona horaria. Aquí se manejan siempre
 // como ese texto 'AAAA-MM-DD'. Nunca se pasan por `new Date('2026-10-03')`, que las lee como la
 // medianoche UTC y en América las muestra un día antes.
 
