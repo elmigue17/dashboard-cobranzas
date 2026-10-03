@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Users, Search, GraduationCap, AlertTriangle, TrendingDown, CheckCircle, Calendar, Mail, Phone, Award, Snowflake, Play, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, diasEntre, esFecha, fmtFecha } from '../fechas';
+import { duracionDePrograma } from '../programas';
 
 const ESTADOS_VALIDOS = ['Activo', 'Por vencer', 'Vencido', 'Pausado', 'Churneado'];
 
@@ -31,11 +32,8 @@ const calcFin = (fInicio, duracionMeses, diasCongelados = 0) => {
   return sumarDias(sumarMeses(fInicio, Number(duracionMeses)), diasCongelados || 0);
 };
 
-const getDuracionFromProg = (progStr) => {
-  const p = renderProg(progStr).toLowerCase();
-  if (p.includes('high ticket')) return 3;
-  return 4;
-};
+// Si el alumno no tiene la duración guardada, la del programa (la misma que usa el alta).
+const getDuracionFromProg = (programa) => duracionDePrograma(programa);
 
 // ─── Dot de estado ────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {

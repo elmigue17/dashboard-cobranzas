@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
+import { PROGRAM_OPTIONS, duracionDePrograma } from '../programas';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
   UserPlus, CreditCard, BarChart2, CheckCircle, XCircle,
@@ -9,8 +10,6 @@ import {
 } from 'lucide-react';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-const PROGRAM_DURATION = { 'Programa Base': 4, 'Programa Pro': 4, 'High Ticket': 6, 'Comunidad': 1 };
-const PROGRAM_OPTIONS  = Object.keys(PROGRAM_DURATION);
 const ESTADOS          = ['Pendiente', 'Pagado', 'Incobrable'];
 
 const fmtDate = fmtFecha;
@@ -302,7 +301,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     setAltaLoading(true);
     try {
       const fInicio = form.fechaInicio;
-      const duracion = PROGRAM_DURATION[form.programa] || 4;
+      const duracion = duracionDePrograma(form.programa);
       const fFin = sumarMeses(fInicio, duracion);
       const montoTotal = parseFloat(form.montoTotal), nCuotas = parseInt(form.nCuotas);
       const pagoEnLlamada = parseFloat(form.pagoEnLlamada || 0);
@@ -311,7 +310,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       const nuevoAlumno = {
         id: alumnoId, nombre: form.nombre, email: form.email,
         telefono: form.whatsapp || null, programa: form.programa,
-        fecha_inicio: fInicio, fecha_fin: fFin,
+        fecha_inicio: fInicio, fecha_fin: fFin, duracion_meses: duracion,
         setter: form.setter || null, closer: form.closer || null,
         estado: 'Activo',
       };
@@ -443,7 +442,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     setRenLoading(true);
     try {
       const fInicio    = renForm.fechaInicio;
-      const duracion   = PROGRAM_DURATION[renForm.programa] || 4;
+      const duracion   = duracionDePrograma(renForm.programa);
       const fFin       = sumarMeses(fInicio, duracion);
       const montoTotal = parseFloat(renForm.montoTotal);
       const nCuotas    = parseInt(renForm.nCuotas);
@@ -452,7 +451,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       // 1. Actualizar alumno
       const alumnoUpdates = {
         programa: renForm.programa, fecha_inicio: fInicio,
-        fecha_fin: fFin, estado: 'Activo',
+        fecha_fin: fFin, duracion_meses: duracion, estado: 'Activo',
         setter: renForm.setter || null, closer: renForm.closer || null,
       };
       const { error: errA } = await supabase.from('alumnos').update(alumnoUpdates).eq('id', renAlumno.id);
