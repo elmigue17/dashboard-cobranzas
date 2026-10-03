@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { hoy } from '../fechas';
+import { APP_TIME_ZONE, getTimeZoneDateKey } from '../timezone';
 import { Calendar as CalendarIcon, Clock, User, Mail, DollarSign, Target, Briefcase, Video, CheckCircle, XCircle } from 'lucide-react';
 
 const BookingManager = ({ llamadas, setLlamadas }) => {
-  // Estado para la fecha seleccionada (por defecto Hoy, formato YYYY-MM-DD)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Día que muestra la agenda (por defecto hoy en la zona horaria del negocio, no en UTC)
+  const [selectedDate, setSelectedDate] = useState(hoy);
 
   // Estado para el modal de detalles o panel lateral
   const [selectedCall, setSelectedCall] = useState(null);
@@ -12,17 +14,10 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
   // Estados del formulario Cierre
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Filtrar las llamadas según la fecha seleccionada (usando fecha de llamada)
+  // Llamadas del día elegido, con el día contado en la zona horaria del negocio
   const filteredCalls = llamadas.filter(call => {
     if (!call.fecha_llamada) return false;
-    // Formatear al huso local para la comparación (simple)
-    const callDate = new Date(call.fecha_llamada);
-    // Para simplificar, comparamos YYYY-MM-DD local
-    const yyyy = callDate.getFullYear();
-    const mm = String(callDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(callDate.getDate()).padStart(2, '0');
-    const localDateString = `${yyyy}-${mm}-${dd}`;
-    return localDateString === selectedDate;
+    return getTimeZoneDateKey(new Date(call.fecha_llamada), APP_TIME_ZONE) === selectedDate;
   });
 
   // Ordenar cronológicamente
@@ -30,8 +25,7 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
 
   const formatTime = (isoString) => {
     if (!isoString) return '--:--';
-    const date = new Date(isoString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(isoString).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE });
   };
 
   const getStatusColor = (status) => {
