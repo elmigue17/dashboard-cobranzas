@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
+import { hoy, sumarMeses, sumarDias, diasEntre, mesDe, fmtFecha } from '../fechas';
 import { fmtMoney, MONEDA, NOMBRES_PROGRAMAS, programaPorNombre, duracionDePrograma, EQUIPO, PORCENTAJES, COMISION_SOBRE } from '../config';
 import { nombrePersona, columnasComision, resumenPorPersona } from '../comisiones';
 import { planDeCuotas, recalcularPago } from '../cuotas';
@@ -73,6 +73,31 @@ const VistaPreviaCuotas = ({ formulario, titulo, tono }) => {
     </div>
   );
 };
+
+// ─── Períodos de los filtros ─────────────────────────────────────────────────
+// 'M:2026-10' un mes, 'Y:2026' un año, 'ALL' todo el historial, 'CUSTOM' un rango de fechas.
+const enPeriodo = (periodo, desde, hasta) => (ds) => {
+  if (!ds) return false;
+  const fecha = String(ds).slice(0, 10);
+  if (periodo === 'ALL') return true;
+  if (periodo === 'CUSTOM') return !desde || !hasta ? true : fecha >= desde && fecha <= hasta;
+  return fecha.startsWith(periodo.slice(2));
+};
+
+const nombreMes = (aaaamm) => {
+  const [y, m] = aaaamm.split('-').map(Number);
+  const nombre = new Date(Date.UTC(y, m - 1, 15)).toLocaleString('es-ES', { month: 'long', timeZone: 'UTC' });
+  return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${y}`;
+};
+
+const OpcionesPeriodo = ({ meses, anios }) => (
+  <>
+    {meses.map(m => <option key={m} value={`M:${m}`}>{nombreMes(m)}</option>)}
+    {anios.map(a => <option key={a} value={`Y:${a}`}>Año {a} completo</option>)}
+    <option value="ALL">Todo el historial</option>
+    <option value="CUSTOM">Rango personalizado</option>
+  </>
+);
 
 // ─── Selector de setter o closer ─────────────────────────────────────────────
 // Ofrece el equipo de negocio.config.js, para que un nombre mal escrito no parta las comisiones.
@@ -159,23 +184,23 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     return name.charAt(0).toUpperCase() + name.slice(1);
   });
 
-  const makeRangeChecker = (range, cStart, cEnd) => (ds) => {
-    if (!ds) return false;
-    const fecha = String(ds).slice(0, 10);
-    if (range === 'CUSTOM') {
-      if (!cStart || !cEnd) return true;
-      return fecha >= cStart && fecha <= cEnd;
-    }
-    if (Number(fecha.slice(0, 4)) !== CURRENT_YEAR) return false;
-    if (range === 'ALL') return true;
-    return Number(fecha.slice(5, 7)) === parseInt(range);
-  };
+  // Meses para elegir: desde este mes hacia atrás hasta el primer dato (como mucho 36), y los años
+  // que tienen datos (también los que vienen, por las cuotas que todavía no vencen).
+  const periodos = useMemo(() => {
+    const fechas = [...cuotas.flatMap(c => [c.fecha_pago, c.fecha_vencimiento]), ...ventas.map(v => v.fecha_venta)].filter(Boolean).map(f => String(f).slice(0, 7));
+    const actual = HOY.slice(0, 7);
+    const primero = fechas.length ? fechas.reduce((a, b) => (a < b ? a : b)) : actual;
+    const meses = [];
+    for (let m = `${actual}-01`; meses.length < 36 && (meses.length < 12 || m.slice(0, 7) >= primero); m = sumarMeses(m, -1)) meses.push(m.slice(0, 7));
+    const anios = [...new Set([...fechas, ...meses].map(f => f.slice(0, 4)))].sort().reverse();
+    return { meses, anios };
+  }, [cuotas, ventas, HOY]);
 
   // ── Tab 1: Resumen ───────────────────────────────────────────────────────────
-  const [dateRange,   setDateRange]   = useState(String(Number(hoy().slice(5, 7))));
+  const [dateRange,   setDateRange]   = useState(() => `M:${hoy().slice(0, 7)}`);
   const [customStart, setCustomStart] = useState('');
   const [customEnd,   setCustomEnd]   = useState('');
-  const isInRange = useMemo(() => makeRangeChecker(dateRange, customStart, customEnd), [dateRange, customStart, customEnd]);
+  const isInRange = useMemo(() => enPeriodo(dateRange, customStart, customEnd), [dateRange, customStart, customEnd]);
 
   const cashCollected = useMemo(() =>
     cuotas.filter(c => c.estado === 'Pagado' && isInRange(c.fecha_pago)).reduce((s, c) => s + Number(c.monto || 0), 0),
@@ -197,13 +222,19 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
   }, [cuotas]);
 
+  // Cuotas que ya vencieron y nadie cobró: la lista de a quién hay que llamar hoy.
+  const vencidasSinPagar = useMemo(() => cuotas
+    .filter(c => c.estado === 'Pendiente' && c.fecha_vencimiento && c.fecha_vencimiento < HOY)
+    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento)), [cuotas, HOY]);
+  const totalVencido = vencidasSinPagar.reduce((s, c) => s + Number(c.monto || 0), 0);
+
   // ── Tab 2: Historial ─────────────────────────────────────────────────────────
   const [histSearch,      setHistSearch]      = useState('');
   const [histEstado,      setHistEstado]      = useState('ALL');
   const [histDateRange,   setHistDateRange]   = useState('ALL');
   const [histCustomStart, setHistCustomStart] = useState('');
   const [histCustomEnd,   setHistCustomEnd]   = useState('');
-  const isHistInRange = useMemo(() => makeRangeChecker(histDateRange, histCustomStart, histCustomEnd), [histDateRange, histCustomStart, histCustomEnd]);
+  const isHistInRange = useMemo(() => enPeriodo(histDateRange, histCustomStart, histCustomEnd), [histDateRange, histCustomStart, histCustomEnd]);
 
   // ── Edición inline de cuota ──────────────────────────────────────────────────
   const [editCuota,        setEditCuota]        = useState(null);
@@ -547,9 +578,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
           <div className="panel toolbar">
             <Calendar size={17} color="var(--text-muted)" />
             <select className="glass-input" value={dateRange} onChange={e => setDateRange(e.target.value)} style={{ width: 'auto', minWidth: '180px' }}>
-              <option value="ALL">Año completo {CURRENT_YEAR}</option>
-              {MONTH_NAMES.map((name, i) => <option key={i+1} value={String(i+1)}>{name} {CURRENT_YEAR}</option>)}
-              <option value="CUSTOM">Rango personalizado</option>
+              <OpcionesPeriodo {...periodos} />
             </select>
             {dateRange === 'CUSTOM' && (<>
               <input type="date" className="glass-input" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ width: 'auto' }} />
@@ -561,7 +590,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
           <div className="grid-stats">
             {[
               { label: 'Cobrado', value: fmtMoney(cashCollected), tone: 'is-positive', Icon: DollarSign, hint: 'Cobrado en el período' },
-              { label: 'Por cobrar',     value: fmtMoney(porCobrar),     tone: 'is-warning',  Icon: Clock,      hint: 'Cuotas pendientes' },
+              { label: 'Por cobrar',     value: fmtMoney(porCobrar),     tone: 'is-warning',  Icon: Clock,      hint: vencidasSinPagar.length ? `Cuotas pendientes · ${fmtMoney(totalVencido)} ya vencidas` : 'Cuotas pendientes' },
               { label: 'Incobrable',     value: fmtMoney(incobrable),    tone: 'is-negative', Icon: XCircle,    hint: 'Dado de baja' },
               { label: 'Nuevas ventas',  value: nuevasVentas,            tone: 'is-accent',   Icon: TrendingUp, hint: 'Altas del período' },
             ].map(({ label, value, tone, Icon, hint }) => (
@@ -611,6 +640,27 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               ))}
             </div>
           )}
+
+          {vencidasSinPagar.length > 0 && (
+            <div className="panel">
+              <h3 className="section-title" style={{ color: 'var(--negative)' }}>
+                <AlertTriangle size={15} /> Vencidas sin pagar: {vencidasSinPagar.length} cuota(s) por {fmtMoney(totalVencido)}
+              </h3>
+              {vencidasSinPagar.slice(0, 30).map(c => (
+                <div key={c.id} className="list-row">
+                  <span>{nombreAlumno(c)} · cuota {c.n_cuota}</span>
+                  <span className="is-negative-text" style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
+                    {fmtMoney(c.monto)} · venció el {fmtDate(c.fecha_vencimiento)} · {diasEntre(c.fecha_vencimiento, HOY)} d
+                  </span>
+                </div>
+              ))}
+              {vencidasSinPagar.length > 30 && (
+                <p style={{ margin: '10px 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  Y {vencidasSinPagar.length - 30} más. Están todas en Historial, con el estado Pendiente.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -629,9 +679,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                 {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
               </select>
               <select className="glass-input" value={histDateRange} onChange={e => setHistDateRange(e.target.value)} style={{ width: 'auto', minWidth: '160px' }}>
-                <option value="ALL">Año completo {CURRENT_YEAR}</option>
-                {MONTH_NAMES.map((name, i) => <option key={i+1} value={String(i+1)}>{name}</option>)}
-                <option value="CUSTOM">Rango personalizado</option>
+                <OpcionesPeriodo {...periodos} />
               </select>
               {histDateRange === 'CUSTOM' && (<>
                 <input type="date" className="glass-input" value={histCustomStart} onChange={e => setHistCustomStart(e.target.value)} style={{ width: 'auto' }} />
