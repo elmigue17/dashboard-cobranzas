@@ -4,6 +4,7 @@ import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
 import { fmtMoney, MONEDA, NOMBRES_PROGRAMAS, programaPorNombre, duracionDePrograma, EQUIPO, PORCENTAJES, COMISION_SOBRE } from '../config';
 import { nombrePersona, columnasComision, resumenPorPersona } from '../comisiones';
 import { planDeCuotas, recalcularPago } from '../cuotas';
+import { estadoDeAlumno } from '../alumnos';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
   UserPlus, CreditCard, BarChart2, CheckCircle, XCircle,
@@ -882,7 +883,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', color: 'var(--text-secondary)' }}>
                 <span>Programa: <b style={{ color: 'var(--text)' }}>{renAlumno.programa}</b></span>
                 <span>F. fin: <b style={{ color: 'var(--text)' }}>{fmtDate(renAlumno.fecha_fin)}</b></span>
-                <span>Estado: <b className={renAlumno.estado === 'Activo' ? 'is-positive-text' : 'is-warning-text'}>{renAlumno.estado}</b></span>
+                <span>Estado: <b className={estadoDeAlumno(renAlumno, hoy()) === 'Activo' ? 'is-positive-text' : 'is-warning-text'}>{estadoDeAlumno(renAlumno, hoy())}</b></span>
               </div>
             </div>
           )}

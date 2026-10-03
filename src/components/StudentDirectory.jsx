@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Users, Search, GraduationCap, AlertTriangle, TrendingDown, CheckCircle, Calendar, Mail, Phone, Award, Snowflake, Play, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, diasEntre, esFecha, fmtFecha } from '../fechas';
 import { duracionDePrograma } from '../config';
+import { estadoDeAlumno, ESTADOS_ALUMNO, ESTADOS_MANUALES, DIAS_POR_VENCER } from '../alumnos';
 
-const ESTADOS_VALIDOS = ['Activo', 'Por vencer', 'Vencido', 'Pausado', 'Churneado'];
 
 const STATUS_CONFIG = {
   'activo':     { color: 'var(--positive)', label: 'Activo' },
@@ -90,27 +90,27 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [saving, setSaving] = useState({}); // { [id]: bool }
 
+  // Estado de cada alumno calculado hoy (ver src/alumnos.js): no depende de que alguien lo actualice.
+  const HOY = hoy();
+  const estadoDe = (a) => estadoDeAlumno(a, HOY);
+
   // ── KPIs ──
-  const activos   = alumnos.filter(a => a.estado?.toLowerCase() === 'activo');
-  const churned   = alumnos.filter(a => a.estado?.toLowerCase() === 'churneado' || a.fecha_baja);
-  const pausados  = alumnos.filter(a => a.congelado_desde);
-  const porVencer = alumnos.filter(a => {
-    if (!a.fecha_fin || a.fecha_baja) return false;
-    const diff = diasEntre(hoy(), a.fecha_fin);
-    return diff >= 0 && diff <= 15;
-  });
+  const activos   = alumnos.filter(a => ['Activo', 'Por vencer'].includes(estadoDe(a)));
+  const churned   = alumnos.filter(a => estadoDe(a) === 'Churneado');
+  const pausados  = alumnos.filter(a => estadoDe(a) === 'Pausado');
+  const porVencer = alumnos.filter(a => estadoDe(a) === 'Por vencer');
 
-  const uniqueStatuses = useMemo(() => ['ALL', ...new Set(alumnos.map(a => a.estado).filter(Boolean))], [alumnos]);
-  const uniqueProgs    = useMemo(() => ['ALL', ...new Set(alumnos.map(a => renderProg(a.programa)).filter(p => p !== '-'))], [alumnos]);
+  const uniqueStatuses = ['ALL', ...ESTADOS_ALUMNO];
+  const uniqueProgs    = ['ALL', ...new Set(alumnos.map(a => renderProg(a.programa)).filter(p => p !== '-'))];
 
-  const filteredAlumnos = useMemo(() => alumnos.filter(a => {
+  const filteredAlumnos = alumnos.filter(a => {
     const matchSearch = !search ||
       a.nombre?.toLowerCase().includes(search.toLowerCase()) ||
       a.email?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'ALL' || a.estado === statusFilter;
+    const matchStatus = statusFilter === 'ALL' || estadoDeAlumno(a, HOY) === statusFilter;
     const matchProg   = progFilter === 'ALL' || renderProg(a.programa) === progFilter;
     return matchSearch && matchStatus && matchProg;
-  }), [alumnos, search, statusFilter, progFilter]);
+  });
 
   // ── Guardar campo en Supabase ──
   const saveField = async (alumnoId, field, rawValue) => {
@@ -138,30 +138,36 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
     setSaving(s => ({ ...s, [alumnoId]: false }));
   };
 
-  // ── Congelar ──
-  const congelarAlumno = async (alumno) => {
-    const updates = { estado: 'Pausado', congelado_desde: hoy() };
+  const guardarAlumno = async (alumno, updates) => {
     setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...updates } : a));
     setSelectedStudent(s => s?.id === alumno.id ? { ...s, ...updates } : s);
-    await supabase.from('alumnos').update(updates).eq('id', alumno.id);
+    const { error } = await supabase.from('alumnos').update(updates).eq('id', alumno.id);
+    if (error) alert('No se pudo guardar: ' + error.message);
   };
 
-  // ── Descongelar ──
-  const descongelarAlumno = async (alumno) => {
-    const diasEstaVez = Math.max(0, diasEntre(alumno.congelado_desde, hoy()));
-    const totalCongelados = (alumno.dias_congelados || 0) + diasEstaVez;
+  // ── Congelar ──
+  const congelarAlumno = (alumno) => guardarAlumno(alumno, { estado: 'Pausado', congelado_desde: hoy() });
 
-    const nuevaFin = alumno.fecha_fin ? sumarDias(alumno.fecha_fin, diasEstaVez) : null;
-
-    const updates = {
+  // ── Descongelar: la fecha de fin se corre los días que estuvo congelado ──
+  const descongelarAlumno = (alumno) => {
+    const diasEstaVez = alumno.congelado_desde ? Math.max(0, diasEntre(alumno.congelado_desde, hoy())) : 0;
+    return guardarAlumno(alumno, {
       estado: 'Activo',
       congelado_desde: null,
-      dias_congelados: totalCongelados,
-      fecha_fin: nuevaFin,
-    };
-    setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...updates } : a));
-    setSelectedStudent(s => s?.id === alumno.id ? { ...s, ...updates } : s);
-    await supabase.from('alumnos').update(updates).eq('id', alumno.id);
+      dias_congelados: (alumno.dias_congelados || 0) + diasEstaVez,
+      fecha_fin: alumno.fecha_fin ? sumarDias(alumno.fecha_fin, diasEstaVez) : null,
+    });
+  };
+
+  // ── Cambio de estado a mano: Activo, Pausado (congela) o Churneado (baja) ──
+  const cambiarEstado = (alumno, nuevo) => {
+    const actual = estadoDeAlumno(alumno, hoy());
+    if (nuevo === actual) return;
+    if (nuevo === 'Pausado') return congelarAlumno(alumno);
+    if (nuevo === 'Churneado') return guardarAlumno(alumno, { estado: 'Churneado', fecha_baja: alumno.fecha_baja || hoy() });
+    // Volver a Activo: si estaba congelado se descongela; si estaba de baja, se borra la baja.
+    if (alumno.congelado_desde) return descongelarAlumno(alumno);
+    return guardarAlumno(alumno, { estado: 'Activo', fecha_baja: null });
   };
 
   const getDaysLeft = (fFin) => {
@@ -178,7 +184,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
         {[
           { label: 'Activos',        value: activos.length,   Icon: CheckCircle,    tone: 'is-positive' },
           { label: 'Total historial', value: alumnos.length,  Icon: GraduationCap,  tone: 'is-accent' },
-          { label: 'Vencen en 15d',  value: porVencer.length, Icon: AlertTriangle,  tone: 'is-warning' },
+          { label: `Vencen en ${DIAS_POR_VENCER}d`, value: porVencer.length, Icon: AlertTriangle, tone: 'is-warning' },
           { label: 'Congelados',     value: pausados.length,  Icon: Snowflake,      tone: 'is-warning' },
           { label: 'Churneados',     value: churned.length,   Icon: TrendingDown,   tone: 'is-negative' },
         ].map(({ label, value, Icon, tone }) => (
@@ -272,8 +278,8 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                       {/* Estado (editable) */}
                       <td data-label="Estado" onClick={e => e.stopPropagation()}>
                         <EditableCell
-                          value={alumno.estado || ''}
-                          onSave={v => saveField(alumno.id, 'estado', v)}
+                          value={estadoDe(alumno)}
+                          onSave={v => cambiarEstado(alumno, v)}
                           renderView={v => <StatusDot status={v} />}
                           renderEdit={(draft, setDraft) => (
                             <select
@@ -283,7 +289,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                               style={{ fontSize: '0.8rem', padding: '3px 6px', minWidth: '110px' }}
                               autoFocus
                             >
-                              {ESTADOS_VALIDOS.map(e => <option key={e} value={e}>{e}</option>)}
+                              {[...new Set([draft, ...ESTADOS_MANUALES])].map(e => <option key={e} value={e} disabled={!ESTADOS_MANUALES.includes(e)}>{e}</option>)}
                             </select>
                           )}
                         />
@@ -385,7 +391,7 @@ const StudentDirectory = ({ alumnos = [], setAlumnos }) => {
                     {isCongelado && <Snowflake size={16} style={{ color: 'var(--warning)' }} />}
                     <h3 style={{ fontSize: '1.25rem', margin: 0 }}>{selectedStudent.nombre}</h3>
                   </div>
-                  <StatusDot status={selectedStudent.estado} />
+                  <StatusDot status={estadoDe(selectedStudent)} />
                 </div>
 
                 {/* Congelamiento activo */}
