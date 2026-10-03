@@ -314,9 +314,65 @@ a { color: var(--accent); }
 
 .sidebar-footer {
   margin-top: auto;
-  padding: 0 6px;
-  font-size: 0.74rem;
+  padding: 12px 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
   color: var(--text-muted);
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.sidebar-actions .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.sidebar-actions .link-btn:hover {
+  color: var(--text);
+}
+
+/* Pantalla de ingreso y ventanas */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  color: var(--text-muted);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
 
 .drawer-overlay {

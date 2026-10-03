@@ -17,12 +17,15 @@ import {
   Menu,
   X as CloseIcon,
   RefreshCw,
+  LogOut,
+  KeyRound,
 } from 'lucide-react';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import ContentManager from './components/ContentManager';
 import BookingManager from './components/BookingManager';
 import StudentDirectory from './components/StudentDirectory';
 import FinanceModule from './components/FinanceModule';
+import CambiarClave from './components/CambiarClave';
 import { LEAD_STATUS_OPTIONS, normalizeLeadStatus } from './leadStatus';
 import {
   buildDescriptiveContentName,
@@ -70,9 +73,10 @@ const VIEW_META = {
   },
 };
 
-function App() {
+function App({ usuario, salir }) {
   const [activeView, setActiveView] = useState('DASHBOARD');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cambiandoClave, setCambiandoClave] = useState(false);
   const [leads, setLeads] = useState([]);
   const [leadRows, setLeadRows] = useState([]);
   const [leadListCount, setLeadListCount] = useState(0);
@@ -628,8 +632,20 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-footer hide-mobile">{NOMBRE_NEGOCIO} · {new Date().getFullYear()}</div>
+        <div className="sidebar-footer">
+          <div className="sidebar-user" title={usuario?.email}>{usuario?.email}</div>
+          <div className="sidebar-actions">
+            <button type="button" className="link-btn" onClick={() => setCambiandoClave(true)}>
+              <KeyRound size={14} /> Contraseña
+            </button>
+            <button type="button" className="link-btn" onClick={salir}>
+              <LogOut size={14} /> Salir
+            </button>
+          </div>
+        </div>
       </aside>
+
+      {cambiandoClave && <CambiarClave onCerrar={() => setCambiandoClave(false)} />}
 
       <main className="main">
         <div className="page-header">

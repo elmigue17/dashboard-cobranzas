@@ -217,27 +217,38 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     setEditComprobante(null);
   };
 
+  // Los comprobantes van a un bucket privado: en la cuota se guarda la ruta del archivo, no un link.
   const subirComprobante = async (cuotaId, archivo) => {
     const ext  = archivo.name.split('.').pop();
     const path = `${cuotaId}/${Date.now()}.${ext}`;
     const { data: upData, error: upErr } = await supabase.storage
       .from('comprobantes').upload(path, archivo, { upsert: true });
     if (upErr) throw upErr;
-    const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(upData.path);
-    return urlData.publicUrl;
+    return upData.path;
+  };
+
+  // Abre el comprobante con un link que vence en 10 minutos.
+  const verComprobante = async (path) => {
+    const ventana = window.open('', '_blank');
+    const { data, error } = await supabase.storage.from('comprobantes').createSignedUrl(path, 600);
+    if (error || !data?.signedUrl) {
+      ventana?.close();
+      return alert('No se pudo abrir el comprobante: ' + (error?.message || 'sin link'));
+    }
+    if (ventana) ventana.location.href = data.signedUrl; else window.location.href = data.signedUrl;
   };
 
   const handleSaveEdit = async () => {
     if (!editCuota) return;
     setEditLoading(true);
     try {
-      let comprobanteUrl = editCuota.comprobante_url || null;
-      if (editComprobante) comprobanteUrl = await subirComprobante(editCuota.id, editComprobante);
+      let comprobante = editCuota.comprobante || null;
+      if (editComprobante) comprobante = await subirComprobante(editCuota.id, editComprobante);
       const updates = {
-        estado:          editEstado,
-        monto:           parseFloat(editMonto),
-        fecha_pago:      editEstado === 'Pagado' ? (editFechaPago || hoy()) : null,
-        comprobante_url: comprobanteUrl,
+        estado:      editEstado,
+        monto:       parseFloat(editMonto),
+        fecha_pago:  editEstado === 'Pagado' ? (editFechaPago || hoy()) : null,
+        comprobante,
       };
       const { error } = await supabase.from('cuotas').update(updates).eq('id', editCuota.id);
       if (error) throw error;
@@ -290,7 +301,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       const montoReal = Math.round(parseFloat(rpMonto) * 100) / 100;
       const comprobantePath = rpComprobante ? await subirComprobante(rpCuota, rpComprobante) : null;
 
-      const pagoUpdates = { estado: 'Pagado', fecha_pago: rpFecha, monto: montoReal, ...(comprobantePath && { comprobante_url: comprobantePath }) };
+      const pagoUpdates = { estado: 'Pagado', fecha_pago: rpFecha, monto: montoReal, ...(comprobantePath && { comprobante: comprobantePath }) };
       const { error: errPago } = await supabase.from('cuotas').update(pagoUpdates).eq('id', rpCuota);
       if (errPago) throw errPago;
 
@@ -713,17 +724,17 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               {/* Comprobante upload */}
               <div>
                 <label className="field-label">Comprobante</label>
-                {editCuota?.comprobante_url && !editComprobante && (
-                  <a href={editCuota.comprobante_url} target="_blank" rel="noreferrer"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', marginBottom: '8px' }}>
+                {editCuota?.comprobante && !editComprobante && (
+                  <button type="button" className="link-btn" onClick={() => verComprobante(editCuota.comprobante)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', marginBottom: '8px', color: 'var(--accent)' }}>
                     <CheckCircle size={14} /> Ver comprobante actual
-                  </a>
+                  </button>
                 )}
                 <label className={`file-drop${editComprobante ? ' has-file' : ''}`}>
                   <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={e => setEditComprobante(e.target.files[0] || null)} />
                   {editComprobante
                     ? <><CheckCircle size={15} /> {editComprobante.name} <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{(editComprobante.size/1024).toFixed(0)} KB</span></>
-                    : <><Paperclip size={15} /> {editCuota?.comprobante_url ? 'Reemplazar archivo' : 'Subir imagen o PDF'}</>}
+                    : <><Paperclip size={15} /> {editCuota?.comprobante ? 'Reemplazar archivo' : 'Subir imagen o PDF'}</>}
                 </label>
                 {editComprobante && (
                   <button type="button" className="link-btn" onClick={() => setEditComprobante(null)} style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>

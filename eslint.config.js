@@ -28,4 +28,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Scripts y pruebas corren en node, no en el navegador.
+    files: ['scripts/**/*.{js,mjs}', 'tests/**/*.js', 'negocio.config.js'],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ])

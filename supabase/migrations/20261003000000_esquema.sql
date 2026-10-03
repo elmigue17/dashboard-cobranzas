@@ -169,7 +169,7 @@ create table public.cuotas (
   closer text,
   comision_setter numeric(12, 2),
   comision_closer numeric(12, 2),
-  comprobante_url text,
+  comprobante text, -- ruta del archivo en el bucket privado "comprobantes"
   notas text,
   constraint cuotas_estado_check check (estado in ('Pendiente', 'Pagado', 'Incobrable'))
 );
@@ -179,22 +179,4 @@ create index cuotas_venta_idx on public.cuotas (venta_id);
 create index cuotas_vencimiento_idx on public.cuotas (fecha_vencimiento);
 create index cuotas_estado_idx on public.cuotas (estado);
 
--- ─── Acceso ─────────────────────────────────────────────────────────────────────────────────────
-
-grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
-
-do $$
-declare
-  t text;
-begin
-  foreach t in array array[
-    'contenidos', 'leads', 'lead_eventos', 'lead_contenidos', 'llamadas', 'alumnos', 'ventas', 'cuotas'
-  ] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format(
-      'create policy "acceso_total" on public.%I for all to anon, authenticated using (true) with check (true)',
-      t
-    );
-  end loop;
-end $$;
+-- Los permisos y las políticas de acceso están en la migración siguiente (acceso.sql).
