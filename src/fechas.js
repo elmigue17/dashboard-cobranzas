@@ -4,7 +4,7 @@
 // como ese texto 'AAAA-MM-DD'. Nunca se pasan por `new Date('2026-10-03')`, que las lee como la
 // medianoche UTC y en América las muestra un día antes.
 
-import { APP_TIME_ZONE, getTimeZoneDateKey } from './timezone';
+import { APP_TIME_ZONE, getTimeZoneDateKey } from './timezone.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 

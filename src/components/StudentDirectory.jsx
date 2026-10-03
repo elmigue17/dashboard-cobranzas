@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Users, Search, GraduationCap, AlertTriangle, TrendingDown, CheckCircle, Calendar, Mail, Phone, Award, Snowflake, Play, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, diasEntre, esFecha, fmtFecha } from '../fechas';
-import { duracionDePrograma } from '../programas';
+import { duracionDePrograma } from '../config';
 
 const ESTADOS_VALIDOS = ['Activo', 'Por vencer', 'Vencido', 'Pausado', 'Churneado'];
 

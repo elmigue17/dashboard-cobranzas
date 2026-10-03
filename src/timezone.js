@@ -1,5 +1,8 @@
-// Zona horaria del navegador. Todas las fechas "hoy", "ayer" y "este mes" se calculan en esta zona.
-export const APP_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+// Zona horaria del negocio (negocio.config.js). "Hoy", "ayer" y "este mes" se calculan en esta zona,
+// sin importar dónde esté la computadora de quien mira el dashboard.
+import { ZONA_HORARIA } from './config.js';
+
+export const APP_TIME_ZONE = ZONA_HORARIA;
 
 // Construir un Intl.DateTimeFormat es caro (decenas de µs, mucho más en celular) y acá se
 // llamaba una vez por fila. Los formatters no tienen estado, así que se cachean por zona.

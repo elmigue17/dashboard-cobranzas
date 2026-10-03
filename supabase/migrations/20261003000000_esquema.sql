@@ -128,6 +128,8 @@ create table public.alumnos (
 create index alumnos_fecha_inicio_idx on public.alumnos (fecha_inicio desc);
 
 -- ─── ventas ─────────────────────────────────────────────────────────────────────────────────────
+-- comision_setter / comision_closer solo se llenan si la comisión se paga sobre lo vendido
+-- (negocio.config.js). Si se paga sobre lo cobrado, se guardan en cada cuota.
 
 create table public.ventas (
   id uuid primary key default gen_random_uuid(),
@@ -141,6 +143,8 @@ create table public.ventas (
   n_cuotas integer,
   setter text,
   closer text,
+  comision_setter numeric(12, 2),
+  comision_closer numeric(12, 2),
   es_renovacion boolean not null default false,
   notas text
 );

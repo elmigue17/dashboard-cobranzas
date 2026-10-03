@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
-import { PROGRAM_OPTIONS, duracionDePrograma } from '../programas';
+import { fmtMoney, MONEDA, NOMBRES_PROGRAMAS, programaPorNombre, duracionDePrograma, EQUIPO, PORCENTAJES, COMISION_SOBRE } from '../config';
 import { nombrePersona, columnasComision, resumenPorPersona } from '../comisiones';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
@@ -14,7 +14,13 @@ import {
 const ESTADOS          = ['Pendiente', 'Pagado', 'Incobrable'];
 
 const fmtDate = fmtFecha;
-const fmtMoney = (n) => `$${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Nombres que se muestran en los avisos de campos obligatorios.
+const ETIQUETAS = {
+  nombre: 'Nombre y apellido', email: 'Email', programa: 'Programa', montoTotal: 'Monto total',
+  fechaInicio: 'Fecha de inicio', nCuotas: 'N° de cuotas',
+};
+const faltaCampo = (formulario, campos) => campos.find((k) => !formulario[k]);
 
 // Devuelve el modificador de color semántico que usa el design system
 const estadoTone = (estado) => {
@@ -44,6 +50,22 @@ const armarCuotas = ({ alumnoId, ventaId, montoTotal, nCuotas, pagoEnLlamada, fe
       closer: closer || null,
     };
   });
+};
+
+// ─── Selector de setter o closer ─────────────────────────────────────────────
+// Ofrece el equipo de negocio.config.js, para que un nombre mal escrito no parta las comisiones.
+// Si el equipo no está configurado, queda un campo de texto libre.
+const PersonaSelect = ({ value, onChange, opciones }) => {
+  if (opciones.length === 0) {
+    return <input className="glass-input" type="text" value={value} onChange={e => onChange(e.target.value)} placeholder="Nombre" />;
+  }
+  const nombres = [...new Set([...opciones, value].filter(Boolean))];
+  return (
+    <select className="glass-input" value={value} onChange={e => onChange(e.target.value)}>
+      <option value="">Sin asignar</option>
+      {nombres.map(n => <option key={n} value={n}>{n}</option>)}
+    </select>
+  );
 };
 
 // ─── Combobox de alumnos (reutilizable) ───────────────────────────────────────
@@ -296,9 +318,15 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const [altaLoading, setAltaLoading] = useState(false);
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Al elegir un programa se proponen su precio y sus cuotas de negocio.config.js (se pueden cambiar).
+  const conPrograma = (f, nombre) => {
+    const p = programaPorNombre(nombre);
+    return { ...f, programa: nombre, ...(p?.precio != null && { montoTotal: String(p.precio) }), ...(p && { nCuotas: String(p.cuotas) }) };
+  };
+
   const handleAltaAlumno = async () => {
-    const req = ['nombre', 'email', 'programa', 'montoTotal', 'fechaInicio', 'nCuotas'];
-    for (const k of req) if (!form[k]) return alert(`"${k}" es requerido.`);
+    const falta = faltaCampo(form, ['nombre', 'email', 'programa', 'montoTotal', 'fechaInicio', 'nCuotas']);
+    if (falta) return alert(`Falta completar "${ETIQUETAS[falta]}".`);
     setAltaLoading(true);
     try {
       const fInicio = form.fechaInicio;
@@ -347,31 +375,32 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   const comMesClave = `${comAnio}-${String(comMes).padStart(2, '0')}`;
   const [comSaving, setComSaving] = useState(false);
 
-  // Cuotas pagadas en el mes seleccionado
-  const cuotasDelMes = useMemo(() => {
-    return cuotas.filter(c => {
-      if (c.estado !== 'Pagado' || !c.fecha_pago) return false;
-      return mesDe(c.fecha_pago) === comMesClave;
-    });
-  }, [cuotas, comMesClave]);
+  // Sobre qué se paga la comisión (negocio.config.js):
+  //  'cobrado': las cuotas que se cobraron en el mes, cada una con su setter y su closer.
+  //  'vendido': las ventas que se hicieron en el mes, por el total vendido.
+  const sobreVendido = COMISION_SOBRE === 'vendido';
+  const enMes = (f) => (sobreVendido ? mesDe(f.fecha_venta) : (f.estado === 'Pagado' && f.fecha_pago ? mesDe(f.fecha_pago) : null)) === comMesClave;
+  const filasDelMes = useMemo(
+    () => (sobreVendido ? ventas : cuotas).filter(enMes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sobreVendido, ventas, cuotas, comMesClave],
+  );
 
-  // Comisiones por persona. El rol (setter, closer o los dos) se decide cuota por cuota:
-  // quien fue setter+closer solo en algunas cuotas cobra el porcentaje doble solo en esas.
-  const comisionesResumen = useMemo(() => resumenPorPersona(cuotasDelMes), [cuotasDelMes]);
+  // Comisiones por persona. El rol (setter, closer o los dos) se decide fila por fila:
+  // quien fue setter+closer solo en algunas cobra el porcentaje de "misma persona" solo en esas.
+  const comisionesResumen = useMemo(() => resumenPorPersona(filasDelMes, PORCENTAJES), [filasDelMes]);
 
   const handleGuardarComisiones = async () => {
     setComSaving(true);
     try {
-      for (const c of cuotasDelMes) {
-        const { error } = await supabase.from('cuotas').update(columnasComision(c)).eq('id', c.id);
+      const tabla = sobreVendido ? 'ventas' : 'cuotas';
+      for (const f of filasDelMes) {
+        const { error } = await supabase.from(tabla).update(columnasComision(f, PORCENTAJES)).eq('id', f.id);
         if (error) throw error;
       }
-      setCuotas(prev => prev.map(c => {
-        if (c.estado !== 'Pagado' || !c.fecha_pago) return c;
-        if (mesDe(c.fecha_pago) !== comMesClave) return c;
-        return { ...c, ...columnasComision(c) };
-      }));
-      alert(`✅ Comisiones del mes guardadas en ${cuotasDelMes.length} cuota(s).`);
+      const actualizar = prev => prev.map(f => (enMes(f) ? { ...f, ...columnasComision(f, PORCENTAJES) } : f));
+      if (sobreVendido) setVentas(actualizar); else setCuotas(actualizar);
+      alert(`✅ Comisiones del mes guardadas en ${filasDelMes.length} ${sobreVendido ? 'venta(s)' : 'cuota(s)'}.`);
     } catch (err) { alert('Error: ' + err.message); }
     finally { setComSaving(false); }
   };
@@ -388,13 +417,13 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     setRenAlumno(a);
     if (!a) return setRenForm(emptyRen);
     const sugeridaInicio = a.fecha_fin ? String(a.fecha_fin).slice(0, 10) : hoy();
-    setRenForm(f => ({ ...f, programa: a.programa || '', fechaInicio: sugeridaInicio, setter: a.setter || '', closer: a.closer || '' }));
+    setRenForm(f => ({ ...conPrograma(f, a.programa || ''), fechaInicio: sugeridaInicio, setter: a.setter || '', closer: a.closer || '' }));
   };
 
   const handleRenovacion = async () => {
     if (!renAlumno) return alert('Selecciona un alumno.');
-    const req = ['programa', 'montoTotal', 'fechaInicio', 'nCuotas'];
-    for (const k of req) if (!renForm[k]) return alert(`"${k}" es requerido.`);
+    const falta = faltaCampo(renForm, ['programa', 'montoTotal', 'fechaInicio', 'nCuotas']);
+    if (falta) return alert(`Falta completar "${ETIQUETAS[falta]}".`);
     setRenLoading(true);
     try {
       const fInicio    = renForm.fechaInicio;
@@ -645,7 +674,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               </div>
 
               <div>
-                <label className="field-label">Monto ($)</label>
+                <label className="field-label">Monto ({MONEDA})</label>
                 <input className="glass-input" type="number" step="0.01" value={editMonto} onChange={e => setEditMonto(e.target.value)} />
               </div>
 
@@ -718,7 +747,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             )}
             <div className="grid-form">
               <div>
-                <label className="field-label">Monto pagado ($) *</label>
+                <label className="field-label">Monto pagado ({MONEDA}) *</label>
                 <input className="glass-input" type="number" step="0.01" placeholder="Ej: 190.00" value={rpMonto} onChange={e => setRpMonto(e.target.value)} />
               </div>
               <div>
@@ -777,15 +806,23 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <h3 className="section-title" style={{ margin: 0 }}><UserPlus size={15} /> Carga de nuevo alumno</h3>
           <div className="grid-form">
-            {[['Nombre y apellido *','nombre','text','Juan Pérez'],['Email *','email','email','juan@ejemplo.com'],['WhatsApp','whatsapp','text','+51 900 000 000'],['Setter','setter','text',''],['Closer','closer','text','']].map(([l,k,t,p]) => inputRow(l,k,t,p,form,setField))}
+            {[['Nombre y apellido *','nombre','text','Juan Pérez'],['Email *','email','email','juan@ejemplo.com'],['WhatsApp','whatsapp','text','Con código de país']].map(([l,k,t,p]) => inputRow(l,k,t,p,form,setField))}
             <div>
               <label className="field-label">Programa *</label>
-              <select className="glass-input" value={form.programa} onChange={e => setField('programa', e.target.value)}>
+              <select className="glass-input" value={form.programa} onChange={e => setForm(f => conPrograma(f, e.target.value))}>
                 <option value="">Seleccionar...</option>
-                {PROGRAM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                {NOMBRES_PROGRAMAS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            {[['Monto total ($) *','montoTotal','number','600'],['Fecha de inicio *','fechaInicio','date',''],['Pagó en llamada ($)','pagoEnLlamada','number','200'],['N° de cuotas *','nCuotas','number','3']].map(([l,k,t,p]) => inputRow(l,k,t,p,form,setField))}
+            {[[`Monto total (${MONEDA}) *`,'montoTotal','number',''],['N° de cuotas *','nCuotas','number',''],['Fecha de inicio *','fechaInicio','date',''],[`Pagó en la llamada (${MONEDA})`,'pagoEnLlamada','number','0']].map(([l,k,t,p]) => inputRow(l,k,t,p,form,setField))}
+            <div>
+              <label className="field-label">Setter</label>
+              <PersonaSelect value={form.setter} onChange={v => setField('setter', v)} opciones={EQUIPO.setters} />
+            </div>
+            <div>
+              <label className="field-label">Closer</label>
+              <PersonaSelect value={form.closer} onChange={v => setField('closer', v)} opciones={EQUIPO.closers} />
+            </div>
           </div>
           {form.montoTotal && form.nCuotas && form.fechaInicio && (
             <div className="note is-positive">
@@ -836,12 +873,20 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
           <div className="grid-form">
             <div>
               <label className="field-label">Nuevo programa *</label>
-              <select className="glass-input" value={renForm.programa} onChange={e => setRenField('programa', e.target.value)}>
+              <select className="glass-input" value={renForm.programa} onChange={e => setRenForm(f => conPrograma(f, e.target.value))}>
                 <option value="">Seleccionar...</option>
-                {PROGRAM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                {NOMBRES_PROGRAMAS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            {[['Monto total ($) *','montoTotal','number','600'],['Fecha de inicio *','fechaInicio','date',''],['Pagó en llamada ($)','pagoEnLlamada','number',''],['N° de cuotas *','nCuotas','number','3'],['Setter','setter','text',''],['Closer','closer','text','']].map(([l,k,t,p]) => inputRow(l,k,t,p,renForm,setRenField))}
+            {[[`Monto total (${MONEDA}) *`,'montoTotal','number',''],['N° de cuotas *','nCuotas','number',''],['Fecha de inicio *','fechaInicio','date',''],[`Pagó en la llamada (${MONEDA})`,'pagoEnLlamada','number','0']].map(([l,k,t,p]) => inputRow(l,k,t,p,renForm,setRenField))}
+            <div>
+              <label className="field-label">Setter</label>
+              <PersonaSelect value={renForm.setter} onChange={v => setRenField('setter', v)} opciones={EQUIPO.setters} />
+            </div>
+            <div>
+              <label className="field-label">Closer</label>
+              <PersonaSelect value={renForm.closer} onChange={v => setRenField('closer', v)} opciones={EQUIPO.closers} />
+            </div>
           </div>
 
           {renAlumno && renForm.montoTotal && renForm.nCuotas && renForm.fechaInicio && (
@@ -879,6 +924,9 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Percent size={16} color="var(--text-muted)" /> Liquidación de comisiones
             </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', flexBasis: '100%' }}>
+              Sobre lo {sobreVendido ? 'vendido' : 'cobrado'}: setter {PORCENTAJES.setter}%, closer {PORCENTAJES.closer}%, la misma persona {PORCENTAJES.mismaPersona}%.
+            </span>
             <select className="glass-input" style={{ width: 'auto', minWidth: '150px' }} value={comMes} onChange={e => setComMes(Number(e.target.value))}>
               {MONTH_NAMES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
             </select>
@@ -886,17 +934,17 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               {[CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              {cuotasDelMes.length} cuota(s) cobrada(s) en el mes
+              {filasDelMes.length} {sobreVendido ? 'venta(s) en el mes' : 'cuota(s) cobrada(s) en el mes'}
             </span>
-            <button onClick={handleGuardarComisiones} disabled={comSaving || cuotasDelMes.length === 0}
+            <button onClick={handleGuardarComisiones} disabled={comSaving || filasDelMes.length === 0}
               className="btn-primary" style={{ marginLeft: 'auto' }}>
               <Save size={15} /> {comSaving ? 'Guardando...' : 'Calcular y guardar'}
             </button>
           </div>
 
-          {cuotasDelMes.length === 0 ? (
+          {filasDelMes.length === 0 ? (
             <div className="panel empty-state">
-              Sin cuotas cobradas en {MONTH_NAMES[comMes - 1]} {comAnio}
+              {sobreVendido ? 'Sin ventas' : 'Sin cuotas cobradas'} en {MONTH_NAMES[comMes - 1]} {comAnio}
             </div>
           ) : (
             <>
@@ -915,7 +963,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div className="stat-value is-positive-text" style={{ fontSize: '1.35rem' }}>{fmtMoney(c.total)}</div>
-                        <div className="stat-hint">{c.filas} cuota(s)</div>
+                        <div className="stat-hint">{c.filas} {sobreVendido ? 'venta(s)' : 'cuota(s)'}</div>
                       </div>
                     </div>
                     <div className="meter">
@@ -928,28 +976,28 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
               {/* Tabla de detalle */}
               <div className="panel panel-flush">
-                <div className="panel-header">Detalle de cuotas cobradas</div>
+                <div className="panel-header">{sobreVendido ? 'Detalle de ventas del mes' : 'Detalle de cuotas cobradas'}</div>
                 <div className="table-scroll">
                   <table className="data-table">
                     <thead>
                       <tr>
-                        {['Alumno', 'Cuota', 'Monto', 'Fecha pago', 'Setter', 'Com. setter', 'Closer', 'Com. closer'].map(h => (
+                        {['Alumno', sobreVendido ? 'Programa' : 'Cuota', 'Monto', sobreVendido ? 'Fecha venta' : 'Fecha pago', 'Setter', 'Com. setter', 'Closer', 'Com. closer'].map(h => (
                           <th key={h}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {cuotasDelMes.map(c => {
+                      {filasDelMes.map(c => {
                         const setter = nombrePersona(c.setter);
                         const closer = nombrePersona(c.closer);
                         const monto  = Number(c.monto);
-                        const com    = columnasComision(c);
+                        const com    = columnasComision(c, PORCENTAJES);
                         return (
                           <tr key={c.id}>
                             <td className="cell-strong">{nombreAlumno(c)}</td>
-                            <td data-label="Cuota" className="cell-muted">#{c.n_cuota}</td>
+                            <td data-label={sobreVendido ? 'Programa' : 'Cuota'} className="cell-muted">{sobreVendido ? c.programa : `#${c.n_cuota}`}</td>
                             <td data-label="Monto" style={{ fontWeight: 650 }}>{fmtMoney(monto)}</td>
-                            <td data-label="Fecha pago" className="cell-muted">{fmtDate(c.fecha_pago)}</td>
+                            <td data-label="Fecha" className="cell-muted">{fmtDate(sobreVendido ? c.fecha_venta : c.fecha_pago)}</td>
                             <td data-label="Setter">{setter || <span className="cell-muted">-</span>}</td>
                             <td data-label="Com. setter" className={setter ? 'is-positive-text' : 'cell-muted'} style={{ fontWeight: 650 }}>{com.comision_setter != null ? fmtMoney(com.comision_setter) : '-'}</td>
                             <td data-label="Closer">{closer || <span className="cell-muted">-</span>}</td>
@@ -962,11 +1010,11 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                       <tr style={{ background: 'var(--surface-2)' }}>
                         <td colSpan={5} style={{ fontWeight: 650, color: 'var(--text-secondary)' }}>Total del mes</td>
                         <td data-label="Total setters" className="is-positive-text" style={{ fontWeight: 700 }}>
-                          {fmtMoney(cuotasDelMes.reduce((s, c) => s + (columnasComision(c).comision_setter || 0), 0))}
+                          {fmtMoney(filasDelMes.reduce((s, c) => s + (columnasComision(c, PORCENTAJES).comision_setter || 0), 0))}
                         </td>
                         <td />
                         <td data-label="Total closers" className="is-positive-text" style={{ fontWeight: 700 }}>
-                          {fmtMoney(cuotasDelMes.reduce((s, c) => s + (columnasComision(c).comision_closer || 0), 0))}
+                          {fmtMoney(filasDelMes.reduce((s, c) => s + (columnasComision(c, PORCENTAJES).comision_closer || 0), 0))}
                         </td>
                       </tr>
                     </tfoot>

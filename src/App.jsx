@@ -30,6 +30,7 @@ import {
   normalizeContentOriginKey,
 } from './contentSystem';
 import { getRangeBounds } from './timezone';
+import { NOMBRE_NEGOCIO, INICIALES_NEGOCIO } from './config';
 
 const LEAD_PAGE_SIZE = 100;
 
@@ -109,6 +110,7 @@ function App() {
   }, [searchQuery]);
 
   useEffect(() => {
+    document.title = NOMBRE_NEGOCIO;
     fetchContentCatalog();
     fetchDashboardLeads();
     fetchAnalyticsGroup();
@@ -573,8 +575,8 @@ function App() {
           <Menu size={20} />
         </button>
         <div className="topbar-brand">
-          <span className="brand-mark">D</span>
-          Dashboard
+          <span className="brand-mark">{INICIALES_NEGOCIO}</span>
+          {NOMBRE_NEGOCIO}
         </div>
         <span className="topbar-spacer" />
         <button
@@ -595,9 +597,9 @@ function App() {
 
       <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">D</span>
+          <span className="brand-mark">{INICIALES_NEGOCIO}</span>
           <span>
-            <span className="brand-name">Dashboard</span>
+            <span className="brand-name">{NOMBRE_NEGOCIO}</span>
             <span className="brand-sub">Cobranzas y comisiones</span>
           </span>
           <button
@@ -626,7 +628,7 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-footer hide-mobile">Dashboard · {new Date().getFullYear()}</div>
+        <div className="sidebar-footer hide-mobile">{NOMBRE_NEGOCIO} · {new Date().getFullYear()}</div>
       </aside>
 
       <main className="main">
