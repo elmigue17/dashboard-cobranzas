@@ -34,6 +34,7 @@ import {
 } from './contentSystem';
 import { getRangeBounds } from './timezone';
 import { NOMBRE_NEGOCIO, INICIALES_NEGOCIO } from './config';
+import { traerTodo } from './traerTodo';
 
 const LEAD_PAGE_SIZE = 100;
 
@@ -149,12 +150,7 @@ function App({ usuario, salir }) {
 
   async function fetchContentCatalog() {
     try {
-      const { data: catalogRows, error } = await supabase
-        .from('contenidos')
-        .select('id, nombre, fecha, link')
-        .order('fecha', { ascending: false });
-
-      if (error) throw error;
+      const catalogRows = await traerTodo('contenidos', { columnas: 'id, nombre, fecha, link', orden: 'fecha', ascendente: false });
 
       const contentMap = {};
       const normalizedOptions = catalogRows.map((item) => {
@@ -215,37 +211,8 @@ function App({ usuario, salir }) {
     try {
       setAnalyticsLoading(true);
 
-      const { count, error: countError } = await supabase
-        .from('leads')
-        .select('id', { count: 'exact', head: true });
-      if (countError) throw countError;
-
-      const step = 2000;
-      const totalRequests = Math.ceil((count || 0) / step);
-      const promises = [];
-
-      for (let i = 0; i < totalRequests; i++) {
-        promises.push(
-          supabase
-            .from('leads')
-            .select('id, created_at, estado, ultima_interaccion')
-            .order('created_at', { ascending: false })
-            .range(i * step, i * step + step - 1)
-        );
-      }
-
-      const results = await Promise.all(promises);
-      let allLeads = [];
-      for (const res of results) {
-        if (res.error) throw res.error;
-        if (res.data) {
-          allLeads = allLeads.concat(
-            res.data.map((lead) => ({ ...lead, estado: normalizeLeadStatus(lead.estado) }))
-          );
-        }
-      }
-
-      setLeads(allLeads);
+      const filas = await traerTodo('leads', { columnas: 'id, created_at, estado, ultima_interaccion', orden: 'created_at', ascendente: false });
+      setLeads(filas.map((lead) => ({ ...lead, estado: normalizeLeadStatus(lead.estado) })));
       setLoadedGroups((prev) => new Set([...prev, 'dashboard_leads']));
     } catch (err) {
       console.error('Error cargando leads para analytics', err);
@@ -389,9 +356,7 @@ function App({ usuario, salir }) {
   async function fetchAnalyticsGroup() {
     try {
       setTabLoading(true);
-      const callsRes = await supabase.from('llamadas').select('*').order('fecha_llamada', { ascending: false });
-      if (callsRes.error) throw callsRes.error;
-      setLlamadas(callsRes.data || []);
+      setLlamadas(await traerTodo('llamadas', { orden: 'fecha_llamada', ascendente: false }));
       setLoadedGroups((prev) => new Set([...prev, 'analytics']));
     } catch (err) {
       console.error('Error cargando las llamadas', err);
@@ -403,9 +368,7 @@ function App({ usuario, salir }) {
   async function fetchDirectoryGroup() {
     try {
       setTabLoading(true);
-      const alumnosRes = await supabase.from('alumnos').select('*').order('fecha_inicio', { ascending: false });
-      if (alumnosRes.error) throw alumnosRes.error;
-      setAlumnos(alumnosRes.data || []);
+      setAlumnos(await traerTodo('alumnos', { orden: 'fecha_inicio', ascendente: false }));
       setLoadedGroups((prev) => new Set([...prev, 'directory']));
     } catch (err) {
       console.error('Error cargando alumnos', err);
@@ -417,25 +380,18 @@ function App({ usuario, salir }) {
   async function fetchFinanceGroup() {
     try {
       setTabLoading(true);
-      const toFetch = [];
-      if (!loadedGroups.has('directory')) {
-        toFetch.push(supabase.from('alumnos').select('*').order('fecha_inicio', { ascending: false }));
-      }
-      toFetch.push(supabase.from('cuotas').select('*').order('fecha_vencimiento', { ascending: true }));
-      toFetch.push(supabase.from('ventas').select('*').order('fecha_venta', { ascending: false }));
-      const results = await Promise.all(toFetch);
-      const ventasRes = results.pop();
-      const cuotasRes = results.pop();
-      if (ventasRes.error) throw ventasRes.error;
-      if (cuotasRes.error) throw cuotasRes.error;
-      if (!loadedGroups.has('directory')) {
-        const alumnosRes = results[0];
-        if (alumnosRes.error) throw alumnosRes.error;
-        setAlumnos(alumnosRes.data || []);
+      // Finanzas necesita los alumnos (nombres) además de cuotas y ventas.
+      const [alumnosFilas, cuotasFilas, ventasFilas] = await Promise.all([
+        loadedGroups.has('directory') ? null : traerTodo('alumnos', { orden: 'fecha_inicio', ascendente: false }),
+        traerTodo('cuotas', { orden: 'fecha_vencimiento', ascendente: true }),
+        traerTodo('ventas', { orden: 'fecha_venta', ascendente: false }),
+      ]);
+      if (alumnosFilas) {
+        setAlumnos(alumnosFilas);
         setLoadedGroups((prev) => new Set([...prev, 'directory']));
       }
-      setCuotas(cuotasRes.data || []);
-      setVentas(ventasRes.data || []);
+      setCuotas(cuotasFilas);
+      setVentas(ventasFilas);
       setLoadedGroups((prev) => new Set([...prev, 'finance']));
     } catch (err) {
       console.error('Error cargando finanzas', err);

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { traerTodo } from '../traerTodo';
 import { Plus, Search, Trash2, Calendar, Link as LinkIcon, Film, Database } from 'lucide-react';
 import {
   buildDescriptiveContentName,
@@ -29,17 +30,10 @@ const ContentManager = ({ onViewLeads }) => {
     try {
       setLoading(true);
 
-      const { data: rows, error } = await supabase
-        .from('contenidos')
-        .select('id, nombre, fecha, link')
-        .order('fecha', { ascending: false });
-
-      if (error) throw error;
-
-      const { data: relations, error: relationError } = await supabase
-        .from('lead_contenidos')
-        .select('contenido_id');
-      if (relationError) throw relationError;
+      const [rows, relations] = await Promise.all([
+        traerTodo('contenidos', { columnas: 'id, nombre, fecha, link', orden: 'fecha', ascendente: false }),
+        traerTodo('lead_contenidos', { columnas: 'contenido_id', desempate: ['lead_id', 'contenido_id'] }),
+      ]);
 
       const relationCounts = (relations || []).reduce((acc, row) => {
         if (!row?.contenido_id) return acc;
