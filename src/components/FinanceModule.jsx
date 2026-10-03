@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { hoy, sumarMeses, sumarDias, mesDe, fmtFecha } from '../fechas';
 import { fmtMoney, MONEDA, NOMBRES_PROGRAMAS, programaPorNombre, duracionDePrograma, EQUIPO, PORCENTAJES, COMISION_SOBRE } from '../config';
 import { nombrePersona, columnasComision, resumenPorPersona } from '../comisiones';
+import { planDeCuotas, recalcularPago } from '../cuotas';
 import {
   DollarSign, Clock, AlertTriangle, TrendingUp, Search,
   UserPlus, CreditCard, BarChart2, CheckCircle, XCircle,
@@ -30,26 +31,46 @@ const estadoTone = (estado) => {
   return '';
 };
 
-// Planilla de cuotas de una venta nueva: la primera es lo que pagó en la llamada (si pagó algo)
-// y el resto se reparte en partes iguales.
-const armarCuotas = ({ alumnoId, ventaId, montoTotal, nCuotas, pagoEnLlamada, fechaInicio, setter, closer }) => {
-  const primerMonto = pagoEnLlamada > 0 ? pagoEnLlamada : montoTotal / nCuotas;
-  const restoMonto  = nCuotas > 1 ? Math.round(((montoTotal - primerMonto) / (nCuotas - 1)) * 100) / 100 : 0;
-  return Array.from({ length: nCuotas }, (_, i) => {
-    const es1ra = i === 0;
-    return {
-      id: crypto.randomUUID(),
-      venta_id: ventaId,
-      alumno_id: alumnoId,
-      n_cuota: i + 1,
-      monto: es1ra ? primerMonto : restoMonto,
-      fecha_vencimiento: sumarMeses(fechaInicio, i),
-      fecha_pago: (es1ra && pagoEnLlamada > 0) ? hoy() : null,
-      estado: (es1ra && pagoEnLlamada > 0) ? 'Pagado' : 'Pendiente',
-      setter: setter || null,
-      closer: closer || null,
-    };
-  });
+// Filas de la tabla cuotas para una venta nueva, a partir del plan de src/cuotas.js.
+const filasDeCuotas = ({ plan, alumnoId, ventaId, setter, closer }) => plan.map(c => ({
+  id: crypto.randomUUID(),
+  venta_id: ventaId,
+  alumno_id: alumnoId,
+  n_cuota: c.n_cuota,
+  monto: c.monto,
+  fecha_vencimiento: c.fecha_vencimiento,
+  fecha_pago: c.pagada ? hoy() : null,
+  estado: c.pagada ? 'Pagado' : 'Pendiente',
+  setter: setter || null,
+  closer: closer || null,
+}));
+
+// Plan de cuotas de un formulario de alta o renovación (o { error }).
+const planDelFormulario = (f) => planDeCuotas({
+  montoTotal: parseFloat(f.montoTotal),
+  nCuotas: parseInt(f.nCuotas),
+  pagoEnLlamada: parseFloat(f.pagoEnLlamada || 0),
+  fechaInicio: f.fechaInicio,
+});
+
+// Vista previa de las cuotas mientras se completa el formulario.
+const VistaPreviaCuotas = ({ formulario, titulo, tono }) => {
+  if (!formulario.montoTotal || !formulario.nCuotas || !formulario.fechaInicio) return null;
+  const { cuotas: plan, error } = planDelFormulario(formulario);
+  return (
+    <div className={`note ${error ? 'is-warning' : tono}`}>
+      <div className="note-title"><ClipboardList size={15} /> {titulo}</div>
+      {error && <div>{error}</div>}
+      {plan && plan.slice(0, 24).map((c, i) => (
+        <div key={c.n_cuota} style={{ display:'flex', justifyContent:'space-between', gap: '12px', padding:'7px 0', borderBottom: i < plan.length - 1 ? '1px solid var(--border)' : 'none' }}>
+          <span style={{ color:'var(--text-secondary)' }}>Cuota {c.n_cuota} · {fmtDate(c.fecha_vencimiento)}</span>
+          <span className={c.pagada ? 'is-positive-text' : 'is-warning-text'} style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
+            {fmtMoney(c.monto)} · {c.pagada ? 'pagada' : 'pendiente'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 // ─── Selector de setter o closer ─────────────────────────────────────────────
@@ -254,58 +275,59 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       .sort((a, b) => (a.n_cuota || 0) - (b.n_cuota || 0));
   }, [cuotas, rpAlumno]);
   const cuotaInfoSeleccionada = cuotasDelAlumno.find(c => c.id === rpCuota);
+  // El recálculo solo toca las cuotas de la MISMA venta (una renovación no se mezcla con la anterior).
+  const cuotasDeLaVenta = cuotaInfoSeleccionada ? cuotas.filter(c => c.venta_id === cuotaInfoSeleccionada.venta_id) : [];
+  const recalculo = cuotaInfoSeleccionada && parseFloat(rpMonto) > 0
+    ? recalcularPago({ cuota: cuotaInfoSeleccionada, montoPagado: parseFloat(rpMonto), fechaPago: rpFecha, cuotasDeLaVenta })
+    : null;
 
   const handleRegistrarPago = async () => {
     if (!rpCuota || !rpMonto || !rpFecha) return alert('Completa todos los campos.');
+    if (!recalculo || recalculo.error) return alert(recalculo?.error || 'Revisa el monto.');
     setRpLoading(true);
     try {
-      const montoReal = parseFloat(rpMonto);
-      const delta     = Number(cuotaInfoSeleccionada.monto) - montoReal; // >0 = pagó menos
+      const montoReal = Math.round(parseFloat(rpMonto) * 100) / 100;
+      const comprobantePath = rpComprobante ? await subirComprobante(rpCuota, rpComprobante) : null;
 
-      const comprobanteUrl = rpComprobante ? await subirComprobante(rpCuota, rpComprobante) : null;
-
-      const pagoUpdates = { estado: 'Pagado', fecha_pago: rpFecha, monto: montoReal, ...(comprobanteUrl && { comprobante_url: comprobanteUrl }) };
+      const pagoUpdates = { estado: 'Pagado', fecha_pago: rpFecha, monto: montoReal, ...(comprobantePath && { comprobante_url: comprobantePath }) };
       const { error: errPago } = await supabase.from('cuotas').update(pagoUpdates).eq('id', rpCuota);
       if (errPago) throw errPago;
-      const restantes = cuotasDelAlumno.filter(c => c.id !== rpCuota);
 
-      if (Math.abs(delta) > 0.01 && restantes.length > 0) {
-        // ── Caso A: hay cuotas restantes → redistribuir delta ──────────────────
-        const nuevoMonto = Math.round(((restantes.reduce((s, c) => s + Number(c.monto), 0) + delta) / restantes.length) * 100) / 100;
-        for (const c of restantes) await supabase.from('cuotas').update({ monto: nuevoMonto }).eq('id', c.id);
-        setCuotas(prev => prev.map(c => {
-          if (c.id === rpCuota) return { ...c, ...pagoUpdates };
-          if (restantes.find(r => r.id === c.id)) return { ...c, monto: nuevoMonto };
-          return c;
-        }));
-        alert(`✅ Pago registrado. ${restantes.length} cuota(s) recalculada(s).`);
+      for (const { id, ...cambios } of recalculo.ajustes) {
+        const { error } = await supabase.from('cuotas').update(cambios).eq('id', id);
+        if (error) throw error;
+      }
 
-      } else if (delta > 0.01 && restantes.length === 0) {
-        // ── Caso B: pagó menos, sin cuotas restantes → crear cuota saldo ────────
-        const nextFvenc = sumarMeses(rpFecha, 1);
-        const saldo = {
+      let saldo = null;
+      if (recalculo.saldo) {
+        saldo = {
           id:                crypto.randomUUID(),
           venta_id:          cuotaInfoSeleccionada.venta_id,
           alumno_id:         cuotaInfoSeleccionada.alumno_id,
-          n_cuota:           (cuotaInfoSeleccionada.n_cuota || 1) + 1,
-          monto:             Math.round(delta * 100) / 100,
-          fecha_vencimiento: nextFvenc,
+          ...recalculo.saldo,
           fecha_pago:        null,
           estado:            'Pendiente',
           setter:            cuotaInfoSeleccionada.setter || null,
           closer:            cuotaInfoSeleccionada.closer || null,
-          notas:             'Saldo de un pago parcial.',
+          notas:             `Saldo del pago parcial de la cuota ${cuotaInfoSeleccionada.n_cuota}.`,
         };
         const { error: errS } = await supabase.from('cuotas').insert([saldo]);
         if (errS) throw errS;
-        setCuotas(prev => [saldo, ...prev.map(c => c.id === rpCuota ? { ...c, ...pagoUpdates } : c)]);
-        alert(`✅ Pago parcial registrado. Se creó cuota de saldo por ${fmtMoney(delta)} con vencimiento ${fmtDate(nextFvenc)}.`);
-
-      } else {
-        // ── Caso C: pagó exacto o de más ─────────────────────────────────────────
-        setCuotas(prev => prev.map(c => c.id === rpCuota ? { ...c, ...pagoUpdates } : c));
-        alert('✅ Pago registrado correctamente.');
       }
+
+      const ajustesPorId = Object.fromEntries(recalculo.ajustes.map(a => [a.id, a]));
+      setCuotas(prev => [
+        ...(saldo ? [saldo] : []),
+        ...prev.map(c => {
+          if (c.id === rpCuota) return { ...c, ...pagoUpdates };
+          if (ajustesPorId[c.id]) return { ...c, ...ajustesPorId[c.id] };
+          return c;
+        }),
+      ]);
+
+      if (saldo) alert(`✅ Pago parcial registrado. Se creó una cuota de saldo por ${fmtMoney(saldo.monto)} que vence el ${fmtDate(saldo.fecha_vencimiento)}.`);
+      else if (recalculo.ajustes.length > 0) alert(`✅ Pago registrado. ${recalculo.ajustes.length} cuota(s) recalculada(s).`);
+      else alert('✅ Pago registrado correctamente.');
 
       setRpAlumno(null); setRpCuota(''); setRpMonto(''); setRpComprobante(null);
     } catch (err) { alert('Error: ' + err.message); }
@@ -329,11 +351,12 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     if (falta) return alert(`Falta completar "${ETIQUETAS[falta]}".`);
     setAltaLoading(true);
     try {
+      const { cuotas: plan, error: errPlan } = planDelFormulario(form);
+      if (errPlan) throw new Error(errPlan);
       const fInicio = form.fechaInicio;
       const duracion = duracionDePrograma(form.programa);
       const fFin = sumarMeses(fInicio, duracion);
-      const montoTotal = parseFloat(form.montoTotal), nCuotas = parseInt(form.nCuotas);
-      const pagoEnLlamada = parseFloat(form.pagoEnLlamada || 0);
+      const montoTotal = parseFloat(form.montoTotal), nCuotas = plan.length;
       const alumnoId = crypto.randomUUID();
 
       const nuevoAlumno = {
@@ -354,7 +377,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       const { error: errV } = await supabase.from('ventas').insert([nuevaVenta]);
       if (errV) throw errV;
 
-      const nuevasCuotas = armarCuotas({ alumnoId, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada, fechaInicio: fInicio, setter: form.setter, closer: form.closer });
+      const nuevasCuotas = filasDeCuotas({ plan, alumnoId, ventaId: nuevaVenta.id, setter: form.setter, closer: form.closer });
       const { error: errC } = await supabase.from('cuotas').insert(nuevasCuotas);
       if (errC) throw errC;
 
@@ -426,12 +449,13 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
     if (falta) return alert(`Falta completar "${ETIQUETAS[falta]}".`);
     setRenLoading(true);
     try {
+      const { cuotas: plan, error: errPlan } = planDelFormulario(renForm);
+      if (errPlan) throw new Error(errPlan);
       const fInicio    = renForm.fechaInicio;
       const duracion   = duracionDePrograma(renForm.programa);
       const fFin       = sumarMeses(fInicio, duracion);
       const montoTotal = parseFloat(renForm.montoTotal);
-      const nCuotas    = parseInt(renForm.nCuotas);
-      const pagoCuota1 = parseFloat(renForm.pagoEnLlamada || 0);
+      const nCuotas    = plan.length;
 
       // 1. Actualizar alumno
       const alumnoUpdates = {
@@ -452,7 +476,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
       if (errV) throw errV;
 
       // 3. Crear nuevas cuotas
-      const nuevasCuotas = armarCuotas({ alumnoId: renAlumno.id, ventaId: nuevaVenta.id, montoTotal, nCuotas, pagoEnLlamada: pagoCuota1, fechaInicio: fInicio, setter: renForm.setter, closer: renForm.closer });
+      const nuevasCuotas = filasDeCuotas({ plan, alumnoId: renAlumno.id, ventaId: nuevaVenta.id, setter: renForm.setter, closer: renForm.closer });
       const { error: errC } = await supabase.from('cuotas').insert(nuevasCuotas);
       if (errC) throw errC;
 
@@ -736,7 +760,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                 <label className="field-label">Cuota *</label>
                 <select className="glass-input" value={rpCuota} onChange={e => { setRpCuota(e.target.value); setRpMonto(cuotasDelAlumno.find(c => c.id === e.target.value)?.monto || ''); }}>
                   <option value="">Seleccionar...</option>
-                  {cuotasDelAlumno.map(c => <option key={c.id} value={c.id}>Cuota {c.n_cuota} · {fmtMoney(c.monto)} · vence {fmtDate(c.fecha_vencimiento)}</option>)}
+                  {cuotasDelAlumno.map(c => <option key={c.id} value={c.id}>Cuota {c.n_cuota} · {ventasById[c.venta_id]?.programa || "Sin programa"} · {fmtMoney(c.monto)} · vence {fmtDate(c.fecha_vencimiento)}</option>)}
                 </select>
               </div>
             )}
@@ -755,16 +779,27 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                 <input className="glass-input" type="date" value={rpFecha} onChange={e => setRpFecha(e.target.value)} />
               </div>
             </div>
-            {cuotaInfoSeleccionada && rpMonto && Math.abs(Number(cuotaInfoSeleccionada.monto) - parseFloat(rpMonto)) > 0.01 && (
+            {recalculo?.error && (
+              <div className="note is-negative">
+                <div className="note-title"><Zap size={15} /> No se puede registrar así</div>
+                <div>{recalculo.maximo != null ? `El pago supera lo que falta pagar de esta venta (${fmtMoney(recalculo.maximo)}).` : recalculo.error}</div>
+              </div>
+            )}
+            {recalculo && !recalculo.error && (recalculo.ajustes.length > 0 || recalculo.saldo) && (
               <div className="note is-warning">
                 <div className="note-title"><Zap size={15} /> Recálculo automático</div>
-                <div>Esperado: {fmtMoney(cuotaInfoSeleccionada.monto)} → pagado: {fmtMoney(rpMonto)}</div>
-                {cuotasDelAlumno.length > 1
-                  ? <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>La diferencia se reparte entre las {cuotasDelAlumno.length - 1} cuota(s) que quedan.</div>
-                  : parseFloat(rpMonto) < Number(cuotaInfoSeleccionada.monto)
-                    ? <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>Sin cuotas restantes: se creará automáticamente una cuota de saldo por {fmtMoney(Number(cuotaInfoSeleccionada.monto) - parseFloat(rpMonto))}.</div>
-                    : null
-                }
+                <div>Esperado: {fmtMoney(cuotaInfoSeleccionada.monto)} · pagado: {fmtMoney(rpMonto)}</div>
+                {recalculo.ajustes.length > 0 && (
+                  <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>
+                    La diferencia se reparte entre las {recalculo.ajustes.length} cuota(s) que quedan de esta venta:{' '}
+                    {recalculo.ajustes.map(a => `la cuota ${cuotasDeLaVenta.find(c => c.id === a.id)?.n_cuota} pasa a ${fmtMoney(a.monto)}${a.estado === 'Pagado' ? ' y queda pagada' : ''}`).join(', ')}.
+                  </div>
+                )}
+                {recalculo.saldo && (
+                  <div style={{ marginTop: '5px', color: 'var(--text-secondary)' }}>
+                    No le quedan cuotas en esta venta: se crea la cuota {recalculo.saldo.n_cuota} por el saldo de {fmtMoney(recalculo.saldo.monto)}, que vence el {fmtDate(recalculo.saldo.fecha_vencimiento)}.
+                  </div>
+                )}
               </div>
             )}
             {/* Comprobante de pago */}
@@ -782,7 +817,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
                 </button>
               )}
             </div>
-            <button onClick={handleRegistrarPago} disabled={rpLoading || !rpCuota || !rpMonto} className="btn-primary btn-block">
+            <button onClick={handleRegistrarPago} disabled={rpLoading || !rpCuota || !rpMonto || !!recalculo?.error} className="btn-primary btn-block">
               {rpLoading ? 'Registrando...' : 'Confirmar pago'}
             </button>
           </div>
@@ -824,25 +859,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
               <PersonaSelect value={form.closer} onChange={v => setField('closer', v)} opciones={EQUIPO.closers} />
             </div>
           </div>
-          {form.montoTotal && form.nCuotas && form.fechaInicio && (
-            <div className="note is-positive">
-              <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas</div>
-              {Array.from({ length: Math.min(parseInt(form.nCuotas)||0, 12) }, (_, i) => {
-                const fv = sumarMeses(form.fechaInicio, i);
-                const p1 = parseFloat(form.pagoEnLlamada)>0 ? parseFloat(form.pagoEnLlamada) : parseFloat(form.montoTotal)/parseInt(form.nCuotas);
-                const pr = parseInt(form.nCuotas)>1 ? (parseFloat(form.montoTotal)-p1)/(parseInt(form.nCuotas)-1) : 0;
-                const pagada = i===0 && parseFloat(form.pagoEnLlamada)>0;
-                return (
-                  <div key={i} style={{ display:'flex', justifyContent:'space-between', gap: '12px', padding:'7px 0', borderBottom: i<parseInt(form.nCuotas)-1?'1px solid var(--border)':'none' }}>
-                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv)}</span>
-                    <span className={pagada ? 'is-positive-text' : 'is-warning-text'} style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
-                      {fmtMoney(i===0?p1:pr)} · {pagada ? 'pagada' : 'pendiente'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <VistaPreviaCuotas formulario={form} titulo="Así quedan las cuotas" tono="is-positive" />
           <button onClick={handleAltaAlumno} disabled={altaLoading} className="btn-primary btn-block">
             {altaLoading ? 'Guardando...' : 'Dar de alta'}
           </button>
@@ -889,25 +906,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             </div>
           </div>
 
-          {renAlumno && renForm.montoTotal && renForm.nCuotas && renForm.fechaInicio && (
-            <div className="note is-accent">
-              <div className="note-title"><ClipboardList size={15} /> Así quedan las cuotas de la renovación</div>
-              {Array.from({ length: Math.min(parseInt(renForm.nCuotas)||0, 12) }, (_, i) => {
-                const fv = sumarMeses(renForm.fechaInicio, i);
-                const p1 = parseFloat(renForm.pagoEnLlamada)>0 ? parseFloat(renForm.pagoEnLlamada) : parseFloat(renForm.montoTotal)/parseInt(renForm.nCuotas);
-                const pr = parseInt(renForm.nCuotas)>1 ? (parseFloat(renForm.montoTotal)-p1)/(parseInt(renForm.nCuotas)-1) : 0;
-                const pagada = i===0 && parseFloat(renForm.pagoEnLlamada)>0;
-                return (
-                  <div key={i} style={{ display:'flex', justifyContent:'space-between', gap: '12px', padding:'7px 0', borderBottom: i<parseInt(renForm.nCuotas)-1?'1px solid var(--border)':'none' }}>
-                    <span style={{ color:'var(--text-secondary)' }}>Cuota {i+1} · {fmtDate(fv)}</span>
-                    <span className={pagada ? 'is-positive-text' : 'is-warning-text'} style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>
-                      {fmtMoney(i===0?p1:pr)} · {pagada ? 'pagada' : 'pendiente'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {renAlumno && <VistaPreviaCuotas formulario={renForm} titulo="Así quedan las cuotas de la renovación" tono="is-accent" />}
 
           <button onClick={handleRenovacion} disabled={renLoading || !renAlumno} className="btn-primary btn-block">
             {renLoading ? 'Registrando...' : 'Confirmar renovación'}
