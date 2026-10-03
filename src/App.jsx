@@ -32,7 +32,7 @@ import {
   getContentDisplayLabel,
   normalizeContentOriginKey,
 } from './contentSystem';
-import { getRangeBounds } from './timezone';
+import { APP_TIME_ZONE, getRangeBounds } from './timezone';
 import { NOMBRE_NEGOCIO, INICIALES_NEGOCIO } from './config';
 import { traerTodo } from './traerTodo';
 
@@ -65,8 +65,8 @@ const VIEW_META = {
     subtitle: 'Transacciones, cobros, comisiones y alta de nuevos alumnos',
   },
   CALLS: {
-    title: 'Booking Calls',
-    subtitle: 'Agenda de videollamadas y pre-cualificación de leads',
+    title: 'Llamadas',
+    subtitle: 'Agenda de llamadas de venta y lo que contó cada lead antes de la llamada',
   },
   DIRECTORY: {
     title: 'Directorio de Alumnos',
@@ -454,6 +454,7 @@ function App({ usuario, salir }) {
     if (!dateString) return '-';
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('es-ES', {
+      timeZone: APP_TIME_ZONE,
       day: 'numeric',
       month: 'short',
       hour: '2-digit',

@@ -219,7 +219,7 @@ const BookingManager = ({ llamadas, setLlamadas }) => {
 
                 {/* Calificación */}
                 <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column' }}>
-                  <label className="field-label">¿Lead cualificado?</label>
+                  <label className="field-label">¿Calificaba?</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       className="btn"

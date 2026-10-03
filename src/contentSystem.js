@@ -56,7 +56,7 @@ export function inferContentType(cod, nombre) {
   const code = (cod || '').trim().toUpperCase();
   const name = collapseWhitespace(nombre).toLowerCase();
 
-  if (code === 'NEW FOLLOW' || name.includes('new follow')) return 'Nuevo Follow';
+  if (code === 'NEW FOLLOW' || code === 'NEW_FOLLOW' || name.includes('new follow') || name.includes('nuevo follow')) return 'Nuevo Follow';
   if (code.startsWith('H') || name.startsWith('hist')) return 'Historia';
   if (code.startsWith('C') || name.startsWith('carru') || name.startsWith('carrusel')) return 'Carrusel';
   if (code.startsWith('R') || name.startsWith('reel')) return 'Reel';

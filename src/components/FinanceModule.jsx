@@ -90,6 +90,9 @@ const PersonaSelect = ({ value, onChange, opciones }) => {
   );
 };
 
+// Para buscar sin importar mayúsculas ni tildes: "lucia" encuentra a "Lucía".
+const sinTildes = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 // ─── Combobox de alumnos (reutilizable) ───────────────────────────────────────
 const AlumnoCombobox = ({ alumnos, value, onSelect, placeholder = 'Buscar alumno...' }) => {
   const [search, setSearch] = useState(value || '');
@@ -97,7 +100,8 @@ const AlumnoCombobox = ({ alumnos, value, onSelect, placeholder = 'Buscar alumno
 
   const filtered = useMemo(() => {
     if (!search) return alumnos;
-    return alumnos.filter(a => a.nombre?.toLowerCase().includes(search.toLowerCase()));
+    const buscado = sinTildes(search);
+    return alumnos.filter(a => sinTildes(a.nombre).includes(buscado));
   }, [alumnos, search]);
 
   const handleSelect = (a) => { setSearch(a.nombre); setOpen(false); onSelect(a); };
@@ -347,7 +351,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
   };
 
   // ── Tab 4: Alta de Nuevo Alumno ──────────────────────────────────────────────
-  const emptyForm = { nombre: '', email: '', whatsapp: '', programa: '', montoTotal: '', fechaInicio: '', pagoEnLlamada: '', nCuotas: '', setter: '', closer: '' };
+  const emptyForm = { nombre: '', email: '', whatsapp: '', programa: '', montoTotal: '', fechaInicio: hoy(), pagoEnLlamada: '', nCuotas: '', setter: '', closer: '' };
   const [form, setForm]           = useState(emptyForm);
   const [altaLoading, setAltaLoading] = useState(false);
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -761,6 +765,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
             <div>
               <label className="field-label">Alumno *</label>
               <AlumnoCombobox
+                key={rpAlumno?.id || 'vacio'}
                 alumnos={alumnos}
                 value={rpAlumno?.nombre || ''}
                 onSelect={a => { setRpAlumno(a); setRpCuota(''); setRpMonto(''); }}
@@ -885,7 +890,7 @@ const FinanceModule = ({ cuotas = [], setCuotas, ventas = [], setVentas, alumnos
 
           <div>
             <label className="field-label">Alumno a renovar *</label>
-            <AlumnoCombobox alumnos={alumnos} value={renAlumno?.nombre || ''} onSelect={onRenAlumnoSelect} placeholder="Buscar alumno (activo o vencido)..." />
+            <AlumnoCombobox key={renAlumno?.id || 'vacio'} alumnos={alumnos} value={renAlumno?.nombre || ''} onSelect={onRenAlumnoSelect} placeholder="Buscar alumno (activo o vencido)..." />
           </div>
 
           {renAlumno && (
